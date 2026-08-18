@@ -25,8 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.model.RagDocument
@@ -39,12 +40,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.inject.Inject
 
-class KnowledgeViewModel(
+@HiltViewModel
+class KnowledgeViewModel @Inject constructor(
     private val ragRepository: RagRepository,
     private val ingestSafDocumentsUseCase: IngestSafDocumentsUseCase
 ) : ViewModel() {
@@ -83,42 +85,6 @@ class KnowledgeViewModel(
         }
     }
 
-    fun ingestSampleClinicalGuide() {
-        val sampleContent = """
-            PANDUAN PRAKTIK KLINIS PUSKESMAS & DOKTER KELUARGA (KEMENKES RI)
-            
-            BAB 1: DEMAM BERDARAH DENGUE (DBD)
-            Kriteria Diagnosis DBD:
-            1. Demam mendadak tinggi kontinu selama 2-7 hari.
-            2. Manifestasi perdarahan: uji torniket positif, petekie, purpura, perdarahan gusi, epistaksis.
-            3. Trombositopenia (Trombosit < 100.000 /µL).
-            4. Tanda kebocoran plasma: peningkatan hematokrit >= 20%, efusi pleura, atau asites.
-            
-            Tanda Bahaya (Warning Signs) DBD:
-            - Nyeri perut hebat atau nyeri tekan abdomen.
-            - Muntah persisten terus-menerus.
-            - Akumulasi cairan klinis (asites/efusi).
-            - Perdarahan mukosa.
-            - Letargi, gelisah, atau penurunan kesadaran.
-            - Pembesaran hati > 2 cm.
-            - Peningkatan hematokrit bersamaan dengan penurunan cepat trombosit.
-            
-            BAB 2: MANAJEMEN HIPERTENSI PRIMER
-            Target Tekanan Darah:
-            - Dewasa umum: < 140/90 mmHg.
-            - Diabetes atau Penyakit Ginjal Kronis: < 130/80 mmHg.
-            Lini pertama terapi: Modifikasi gaya hidup (Diet DASH rendah garam < 2 gram/hari, olahraga aerobik 150 menit/minggu) + Amlodipin 5 mg atau Captopril 25 mg.
-        """.trimIndent()
-
-        val stream = ByteArrayInputStream(sampleContent.toByteArray(Charsets.UTF_8))
-        ingestDocumentFromUri(
-            fileName = "Panduan_Praktik_Klinis_Kemenkes.pdf",
-            fileUri = "saf://documents/Panduan_Praktik_Klinis_Kemenkes.pdf",
-            mimeType = "application/pdf",
-            inputStream = stream
-        )
-    }
-
     fun searchKnowledge(query: String) {
         if (query.isBlank()) {
             _searchResults.value = emptyList()
@@ -136,15 +102,6 @@ class KnowledgeViewModel(
         }
     }
 
-    class Factory(
-        private val ragRepository: RagRepository,
-        private val ingestSafDocumentsUseCase: IngestSafDocumentsUseCase
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return KnowledgeViewModel(ragRepository, ingestSafDocumentsUseCase) as T
-        }
-    }
 }
 
 @Composable
@@ -153,10 +110,10 @@ fun KnowledgeBaseScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val documents by viewModel.documents.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
-    val isIngesting by viewModel.isIngesting.collectAsState()
-    val ingestMsg by viewModel.ingestMessage.collectAsState()
+    val documents by viewModel.documents.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+    val isIngesting by viewModel.isIngesting.collectAsStateWithLifecycle()
+    val ingestMsg by viewModel.ingestMessage.collectAsStateWithLifecycle()
 
     var testQuery by remember { mutableStateOf("") }
 

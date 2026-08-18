@@ -23,8 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.core.designsystem.theme.UrgencyEmergencyRed
@@ -41,8 +42,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ToolsViewModel(
+@HiltViewModel
+class ToolsViewModel @Inject constructor(
     private val drugRepository: DrugRepository,
     private val healthToolsRepository: HealthToolsRepository
 ) : ViewModel() {
@@ -86,7 +89,7 @@ class ToolsViewModel(
         }
     }
 
-    fun addSampleReminder(title: String, hour: Int, minute: Int) {
+    fun addReminder(title: String, hour: Int, minute: Int) {
         viewModelScope.launch {
             healthToolsRepository.saveReminder(
                 Reminder(
@@ -106,15 +109,6 @@ class ToolsViewModel(
         }
     }
 
-    class Factory(
-        private val drugRepository: DrugRepository,
-        private val healthToolsRepository: HealthToolsRepository
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ToolsViewModel(drugRepository, healthToolsRepository) as T
-        }
-    }
 }
 
 @Composable
@@ -122,11 +116,11 @@ fun HealthToolsScreen(
     viewModel: ToolsViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val selectedTab by viewModel.selectedTab.collectAsState()
-    val drugs by viewModel.searchResults.collectAsState()
-    val labTests by viewModel.labTests.collectAsState()
-    val reminders by viewModel.reminders.collectAsState()
-    val interactions by viewModel.checkedInteractions.collectAsState()
+    val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
+    val drugs by viewModel.searchResults.collectAsStateWithLifecycle()
+    val labTests by viewModel.labTests.collectAsStateWithLifecycle()
+    val reminders by viewModel.reminders.collectAsStateWithLifecycle()
+    val interactions by viewModel.checkedInteractions.collectAsStateWithLifecycle()
 
     val tabs = listOf("Obat & Interaksi", "Evaluasi Lab", "Kalkulator Klinis", "Pengingat")
 
@@ -180,7 +174,7 @@ fun HealthToolsScreen(
                 3 -> RemindersTabContent(
                     reminders = reminders,
                     onToggle = { id, en -> viewModel.toggleReminder(id, en) },
-                    onAdd = { t, h, m -> viewModel.addSampleReminder(t, h, m) },
+                    onAdd = { t, h, m -> viewModel.addReminder(t, h, m) },
                     onDelete = { id -> viewModel.deleteReminder(id) }
                 )
             }

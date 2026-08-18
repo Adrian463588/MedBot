@@ -146,20 +146,30 @@ class ComprehensiveMedicalToolsTest {
 
     @Test
     fun `ToolRegistry executes all registered deterministic tools successfully`() = runBlocking {
-        val toolNames = listOf(
-            "assess_urgency",
-            "calculate_zscore",
-            "get_paediatric_dosing",
-            "evaluate_skin_abcd",
-            "calculate_bmi",
-            "calculate_due_date",
-            "interpret_lab_result"
+        val validInputs = mapOf(
+            "assess_urgency" to mapOf("query" to "demam sejak kemarin"),
+            "calculate_zscore" to mapOf(
+                "age_months" to 24,
+                "weight_kg" to 12.0,
+                "height_cm" to 85.0,
+                "gender" to "male"
+            ),
+            "get_paediatric_dosing" to mapOf("drug_name" to "paracetamol", "weight_kg" to 12.0),
+            "evaluate_skin_abcd" to mapOf(
+                "asymmetry" to false,
+                "border_irregular" to false,
+                "color_variegated" to false,
+                "diameter_mm" to 4.0
+            ),
+            "calculate_bmi" to mapOf("weight_kg" to 65.0, "height_cm" to 170.0),
+            "calculate_due_date" to mapOf("day" to 10, "month" to 1, "year" to 2026),
+            "interpret_lab_result" to mapOf("test_name" to "hemoglobin", "value" to 14.0)
         )
 
-        for (name in toolNames) {
+        for ((name, params) in validInputs) {
             val tool = ToolRegistry.getTool(name)
             assertNotNull("Tool $name must be registered", tool)
-            val res = ToolRegistry.executeTool(name, emptyMap())
+            val res = ToolRegistry.executeTool(name, params)
             assertTrue("Execution of $name should succeed", res.isSuccess)
         }
     }

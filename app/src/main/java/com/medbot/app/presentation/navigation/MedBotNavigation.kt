@@ -6,13 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.medbot.app.core.designsystem.components.MedBotBottomBar
-import com.medbot.app.core.di.AppContainer
 import com.medbot.app.presentation.chat.ChatScreen
 import com.medbot.app.presentation.chat.ChatViewModel
 import com.medbot.app.presentation.home.HomeScreen
@@ -31,7 +30,6 @@ import com.medbot.app.presentation.tools.ToolsViewModel
 
 @Composable
 fun MedBotNavigation(
-    appContainer: AppContainer,
     navController: NavHostController = rememberNavController()
 ) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -67,16 +65,8 @@ fun MedBotNavigation(
                 .padding(bottom = if (shouldShowBottomBar) innerPadding.calculateBottomPadding() else 0.dp)
         ) {
             composable("home") {
-                val homeViewModel: HomeViewModel = viewModel(
-                    factory = HomeViewModel.Factory(
-                        modelRepository = appContainer.modelRepository,
-                        ragRepository = appContainer.ragRepository,
-                        userPreferencesRepository = appContainer.userPreferencesRepository,
-                        chatRepository = appContainer.chatRepository
-                    )
-                )
                 HomeScreen(
-                    viewModel = homeViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateToChat = { sessionId ->
                         if (sessionId != null) {
                             navController.navigate("chat?sessionId=$sessionId")
@@ -101,15 +91,8 @@ fun MedBotNavigation(
                 })
             ) { backStackEntry ->
                 val sessionId = backStackEntry.arguments?.getString("sessionId")
-                val chatViewModel: ChatViewModel = viewModel(
-                    factory = ChatViewModel.Factory(
-                        chatRepository = appContainer.chatRepository,
-                        sendMessageUseCase = appContainer.sendMessageUseCase,
-                        userPreferencesRepository = appContainer.userPreferencesRepository
-                    )
-                )
                 ChatScreen(
-                    viewModel = chatViewModel,
+                    viewModel = hiltViewModel(),
                     initialSessionId = sessionId,
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToPersona = { navController.navigate("persona") }
@@ -117,80 +100,45 @@ fun MedBotNavigation(
             }
 
             composable("skin_lineage") {
-                val skinViewModel: SkinViewModel = viewModel(
-                    factory = SkinViewModel.Factory(
-                        skinRepository = appContainer.skinRepository,
-                        analyzeSkinUseCase = appContainer.analyzeSkinUseCase
-                    )
-                )
                 SkinLineageScreen(
-                    viewModel = skinViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToScan = { navController.navigate("skin_scan") }
                 )
             }
 
             composable("skin_scan") {
-                val skinViewModel: SkinViewModel = viewModel(
-                    factory = SkinViewModel.Factory(
-                        skinRepository = appContainer.skinRepository,
-                        analyzeSkinUseCase = appContainer.analyzeSkinUseCase
-                    )
-                )
                 SkinScanScreen(
-                    viewModel = skinViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateBack = { navController.popBackStack() },
                     onNavigateToLineage = { navController.navigate("skin_lineage") }
                 )
             }
 
             composable("knowledge") {
-                val knowledgeViewModel: KnowledgeViewModel = viewModel(
-                    factory = KnowledgeViewModel.Factory(
-                        ragRepository = appContainer.ragRepository,
-                        ingestSafDocumentsUseCase = appContainer.ingestSafDocumentsUseCase
-                    )
-                )
                 KnowledgeBaseScreen(
-                    viewModel = knowledgeViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
 
             composable("models") {
-                val modelViewModel: ModelViewModel = viewModel(
-                    factory = ModelViewModel.Factory(
-                        modelRepository = appContainer.modelRepository,
-                        userPreferencesRepository = appContainer.userPreferencesRepository
-                    )
-                )
                 ModelManagerScreen(
-                    viewModel = modelViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
 
             composable("persona") {
-                val personaViewModel: PersonaViewModel = viewModel(
-                    factory = PersonaViewModel.Factory(
-                        userPreferencesRepository = appContainer.userPreferencesRepository
-                    )
-                )
                 PersonaConfigScreen(
-                    viewModel = personaViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
 
             composable("tools") {
-                val toolsViewModel: ToolsViewModel = viewModel(
-                    factory = ToolsViewModel.Factory(
-                        drugRepository = appContainer.drugRepository,
-                        healthToolsRepository = appContainer.healthToolsRepository
-                    )
-                )
                 HealthToolsScreen(
-                    viewModel = toolsViewModel,
+                    viewModel = hiltViewModel(),
                     onNavigateBack = { navController.popBackStack() }
                 )
             }

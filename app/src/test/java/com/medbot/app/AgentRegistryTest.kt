@@ -8,7 +8,7 @@ class AgentRegistryTest {
 
     @Test
     fun `AgentRegistry contains exactly 46 medical specialists plus orchestrator`() {
-        // Orchestrator + 45 specialist agents = 46 agents total in ALL_AGENTS
+        // Registry contract currently exposes 46 total agents, including orchestrator.
         assertEquals(46, AgentRegistry.ALL_AGENTS.size)
     }
 

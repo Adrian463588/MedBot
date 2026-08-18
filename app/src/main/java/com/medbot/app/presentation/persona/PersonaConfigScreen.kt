@@ -21,8 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.agents.AgentRegistry
@@ -34,8 +35,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class PersonaViewModel(
+@HiltViewModel
+class PersonaViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
@@ -48,14 +51,6 @@ class PersonaViewModel(
         }
     }
 
-    class Factory(
-        private val userPreferencesRepository: UserPreferencesRepository
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return PersonaViewModel(userPreferencesRepository) as T
-        }
-    }
 }
 
 @Composable
@@ -63,7 +58,7 @@ fun PersonaConfigScreen(
     viewModel: PersonaViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val config by viewModel.personaConfig.collectAsState()
+    val config by viewModel.personaConfig.collectAsStateWithLifecycle()
 
     var selectedAgentId by remember(config.selectedAgentId) { mutableStateOf(config.selectedAgentId) }
     var selectedTone by remember(config.tone) { mutableStateOf(config.tone) }

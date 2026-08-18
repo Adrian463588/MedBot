@@ -1,7 +1,13 @@
 package com.medbot.app.data.download
 
 import android.content.Context
-import androidx.work.*
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.domain.model.DownloadProgress
 import com.medbot.app.domain.model.ModelDownloadStatus
@@ -9,97 +15,78 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.io.File
 
-class ModelDownloadManager(private val context: Context) {
-
-    private val workManager = WorkManager.getInstance(context)
+/** Schedules and observes resumable model downloads. */
+class ModelDownloadManager(context: Context) {
+    private val appContext = context.applicationContext
+    private val workManager = WorkManager.getInstance(appContext)
 
     fun startDownload(modelId: String) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val downloadWork = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setConstraints(constraints)
+        if (ModelRegistry.getManifestById(modelId) == null) return
+        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(workDataOf(ModelDownloadWorker.KEY_MODEL_ID to modelId))
             .addTag("download_$modelId")
             .build()
-
-        workManager.enqueueUniqueWork(
-            "download_$modelId",
-            ExistingWorkPolicy.REPLACE,
-            downloadWork
-        )
+        workManager.enqueueUniqueWork("download_$modelId", ExistingWorkPolicy.REPLACE, request)
     }
 
-    fun pauseDownload(modelId: String) {
-        workManager.cancelUniqueWork("download_$modelId")
-    }
+    /** Cancels active work while preserving `.part` for a later resume. */
+    fun pauseDownload(modelId: String) = workManager.cancelUniqueWork("download_$modelId")
 
+    /** Cancels active work and removes only this model's partial artifact. */
     fun cancelDownload(modelId: String) {
         workManager.cancelUniqueWork("download_$modelId")
         val manifest = ModelRegistry.getManifestById(modelId) ?: return
-        val ext = if (manifest.format.name == "GGUF") "gguf" else "litertlm"
-        val partFile = File(context.filesDir, "models/${manifest.id}.$ext.part")
-        if (partFile.exists()) partFile.delete()
+        val extension = when (manifest.format.name) {
+            "LITERTLM" -> "litertlm"
+            "GGUF" -> "gguf"
+            "ONNX" -> "onnx"
+            else -> return
+        }
+        File(appContext.filesDir, "models/${manifest.id}.$extension.part").delete()
     }
 
-    fun getDownloadProgressFlow(modelId: String): Flow<DownloadProgress?> {
-        return workManager.getWorkInfosForUniqueWorkFlow("download_$modelId").map { workInfoList ->
-            val info = workInfoList.firstOrNull() ?: return@map checkFileStatus(modelId)
+    fun getDownloadProgressFlow(modelId: String): Flow<DownloadProgress?> =
+        workManager.getWorkInfosForUniqueWorkFlow("download_$modelId").map { infos ->
+            val info = infos.firstOrNull() ?: return@map checkFileStatus(modelId)
+            val manifest = ModelRegistry.getManifestById(modelId)
             val progress = info.progress
-            val bytes = progress.getLong(ModelDownloadWorker.KEY_BYTES, 0L)
-            val total = progress.getLong(ModelDownloadWorker.KEY_TOTAL, 0L)
-
             val status = when (info.state) {
-                WorkInfo.State.RUNNING -> ModelDownloadStatus.DOWNLOADING
+                WorkInfo.State.RUNNING, WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> ModelDownloadStatus.DOWNLOADING
                 WorkInfo.State.SUCCEEDED -> ModelDownloadStatus.READY_TO_LOAD
-                WorkInfo.State.FAILED -> ModelDownloadStatus.ERROR
                 WorkInfo.State.CANCELLED -> ModelDownloadStatus.PAUSED
-                WorkInfo.State.ENQUEUED -> ModelDownloadStatus.DOWNLOADING
-                WorkInfo.State.BLOCKED -> ModelDownloadStatus.DOWNLOADING
+                WorkInfo.State.FAILED -> ModelDownloadStatus.ERROR
             }
-
             DownloadProgress(
                 modelId = modelId,
-                bytesDownloaded = bytes,
-                totalBytes = total,
-                speedBytesPerSec = 1024 * 512,
-                status = status
+                bytesDownloaded = progress.getLong(ModelDownloadWorker.KEY_BYTES, 0L),
+                totalBytes = progress.getLong(ModelDownloadWorker.KEY_TOTAL, manifest?.sizeBytes ?: 0L),
+                speedBytesPerSec = progress.getLong(ModelDownloadWorker.KEY_SPEED, 0L),
+                status = status,
+                errorMessage = info.outputData.getString(ModelDownloadWorker.KEY_ERROR)
             )
         }
-    }
 
     fun checkFileStatus(modelId: String): DownloadProgress {
         val manifest = ModelRegistry.getManifestById(modelId)
-        if (manifest == null) {
-            return DownloadProgress(modelId, 0, 0, 0, ModelDownloadStatus.NOT_DOWNLOADED)
+            ?: return DownloadProgress(modelId, 0L, 0L, 0L, ModelDownloadStatus.ERROR, "MODEL_UNAVAILABLE")
+        val extension = when (manifest.format.name) {
+            "LITERTLM" -> "litertlm"
+            "GGUF" -> "gguf"
+            "ONNX" -> "onnx"
+            else -> return DownloadProgress(modelId, 0L, manifest.sizeBytes, 0L, ModelDownloadStatus.ERROR, "MODEL_FORMAT_UNSUPPORTED")
         }
-        val ext = if (manifest.format.name == "GGUF") "gguf" else "litertlm"
-        val targetFile = File(context.filesDir, "models/${manifest.id}.$ext")
-        val partFile = File(context.filesDir, "models/${manifest.id}.$ext.part")
-
+        val directory = File(appContext.filesDir, "models")
+        val target = File(directory, "${manifest.id}.$extension")
+        val part = File(directory, "${manifest.id}.$extension.part")
         return when {
-            targetFile.exists() -> DownloadProgress(
-                modelId = modelId,
-                bytesDownloaded = targetFile.length(),
-                totalBytes = manifest.sizeBytes,
-                speedBytesPerSec = 0,
-                status = ModelDownloadStatus.READY_TO_LOAD
+            target.isFile && target.length() == manifest.sizeBytes -> DownloadProgress(
+                modelId, target.length(), manifest.sizeBytes, 0L, ModelDownloadStatus.READY_TO_LOAD
             )
-            partFile.exists() -> DownloadProgress(
-                modelId = modelId,
-                bytesDownloaded = partFile.length(),
-                totalBytes = manifest.sizeBytes,
-                speedBytesPerSec = 0,
-                status = ModelDownloadStatus.PAUSED
+            part.isFile -> DownloadProgress(
+                modelId, part.length(), manifest.sizeBytes, 0L, ModelDownloadStatus.PAUSED
             )
-            else -> DownloadProgress(
-                modelId = modelId,
-                bytesDownloaded = 0,
-                totalBytes = manifest.sizeBytes,
-                speedBytesPerSec = 0,
-                status = ModelDownloadStatus.NOT_DOWNLOADED
-            )
+            else -> DownloadProgress(modelId, 0L, manifest.sizeBytes, 0L, ModelDownloadStatus.NOT_DOWNLOADED)
         }
     }
 }

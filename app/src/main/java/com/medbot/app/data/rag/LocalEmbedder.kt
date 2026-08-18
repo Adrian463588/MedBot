@@ -1,64 +1,37 @@
 package com.medbot.app.data.rag
 
-import kotlin.math.sqrt
-
+/**
+ * Embedding boundary. A real ONNX/LiteRT embedder is not wired in this
+ * checkout, so production calls fail explicitly instead of hashing text.
+ */
 class LocalEmbedder(val dimensions: Int = 384) {
+    init {
+        require(dimensions > 0) { "Embedding dimensions must be positive" }
+    }
 
     fun embed(text: String): FloatArray {
-        val vector = FloatArray(dimensions)
-        val normalized = text.lowercase().replace(Regex("[^a-z0-9\\s]"), " ")
-        val tokens = normalized.split(Regex("\\s+")).filter { it.length >= 2 }
-
-        if (tokens.isEmpty()) {
-            return vector
-        }
-
-        // Feature hashing over n-grams and word tokens
-        for (token in tokens) {
-            val h1 = token.hashCode()
-            val idx1 = Math.floorMod(h1, dimensions)
-            val sign1 = if ((h1 and 1) == 0) 1.0f else -1.0f
-            vector[idx1] += sign1 * 1.5f
-
-            // Subword char-trigram hashing for morphology matching
-            if (token.length >= 3) {
-                for (i in 0..token.length - 3) {
-                    val tri = token.substring(i, i + 3)
-                    val hTri = tri.hashCode()
-                    val idxTri = Math.floorMod(hTri, dimensions)
-                    val signTri = if ((hTri and 1) == 0) 0.5f else -0.5f
-                    vector[idxTri] += signTri
-                }
-            }
-        }
-
-        // L2 normalize vector
-        var sumSquares = 0.0f
-        for (v in vector) {
-            sumSquares += v * v
-        }
-
-        val norm = sqrt(sumSquares)
-        if (norm > 1e-6f) {
-            for (i in vector.indices) {
-                vector[i] /= norm
-            }
-        }
-
-        return vector
+        if (text.isBlank()) throw RagProcessingException(RagFailureCode.INVALID_DOCUMENT, "Cannot embed empty text")
+        throw RagProcessingException(
+            RagFailureCode.EMBEDDER_UNAVAILABLE,
+            "No local embedding model is wired"
+        )
     }
 
     fun vectorToCsv(vector: FloatArray): String {
-        return vector.joinToString(",") { "%.5f".format(it) }
+        require(vector.size == dimensions) { "Embedding dimension mismatch" }
+        require(vector.all { it.isFinite() }) { "Embedding contains a non-finite value" }
+        return vector.joinToString(",")
     }
 
     fun csvToVector(csv: String): FloatArray {
-        if (csv.isBlank()) return FloatArray(dimensions)
-        val parts = csv.split(",")
-        val result = FloatArray(dimensions)
-        for (i in 0 until minOf(parts.size, dimensions)) {
-            result[i] = parts[i].toFloatOrNull() ?: 0.0f
+        if (csv.isBlank()) throw RagProcessingException(RagFailureCode.INVALID_DOCUMENT, "Stored embedding is empty")
+        val parts = csv.split(',')
+        if (parts.size != dimensions) {
+            throw RagProcessingException(RagFailureCode.INVALID_DOCUMENT, "Stored embedding dimension mismatch")
         }
-        return result
+        return FloatArray(dimensions) { index ->
+            parts[index].toFloatOrNull()?.takeIf { it.isFinite() }
+                ?: throw RagProcessingException(RagFailureCode.INVALID_DOCUMENT, "Stored embedding is invalid")
+        }
     }
 }

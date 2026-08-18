@@ -25,11 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
+import com.medbot.app.core.designsystem.components.AdaptiveContent
+import com.medbot.app.core.designsystem.components.MedBotWindowWidth
 import com.medbot.app.core.designsystem.components.StatusBannerCard
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.core.designsystem.theme.*
@@ -45,8 +47,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class HomeViewModel(
+@HiltViewModel
+class HomeViewModel @Inject constructor(
     private val modelRepository: ModelRepository,
     private val ragRepository: RagRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
@@ -79,17 +83,6 @@ class HomeViewModel(
         }
     }
 
-    class Factory(
-        private val modelRepository: ModelRepository,
-        private val ragRepository: RagRepository,
-        private val userPreferencesRepository: UserPreferencesRepository,
-        private val chatRepository: ChatRepository
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return HomeViewModel(modelRepository, ragRepository, userPreferencesRepository, chatRepository) as T
-        }
-    }
 }
 
 val CLINICAL_CLUSTERS = listOf(
@@ -103,42 +96,6 @@ val CLINICAL_CLUSTERS = listOf(
     "Saraf & Rehabilitasi"
 )
 
-data class HealthRecommendation(
-    val title: String,
-    val sub: String,
-    val emoji: String,
-    val color: Color,
-    val description: String,
-    val steps: List<String>
-)
-
-val DAILY_RECOMMENDATIONS = listOf(
-    HealthRecommendation(
-        title = "Pola Tidur Sehat",
-        sub = "Program Pemulihan 7 Hari",
-        emoji = "🌙",
-        color = Color(0xFF1E293B),
-        description = "Tidur berkualitas 7-8 jam sangat penting untuk perbaikan sel imun, fungsi kognitif, dan metabolisme hormon.",
-        steps = listOf("Tetapkan jam tidur teratur setiap malam", "Hindari layar HP 1 jam sebelum tidur", "Pastikan kamar sejuk dan gelap", "Hindari kafein setelah jam 14:00")
-    ),
-    HealthRecommendation(
-        title = "Nutrisi Seimbang & Energi",
-        sub = "Pedoman Gizi Seimbang",
-        emoji = "🥗",
-        color = Color(0xFF0D7C66),
-        description = "Gizi seimbang kaya serat dan antioksidan memberi energi berkelanjutan serta mencegah penyakit metabolik.",
-        steps = listOf("Penuhi separuh piring dengan sayur dan buah", "Pilih karbohidrat kompleks (nasi merah/gandum)", "Minum 8 gelas air putih setiap hari", "Kurangi makanan tinggi gula dan garam")
-    ),
-    HealthRecommendation(
-        title = "Manajemen Stres & Pikiran",
-        sub = "Relaksasi Pernapasan",
-        emoji = "🧘",
-        color = Color(0xFF2563EB),
-        description = "Stres kronis memicu peningkatan hormon kortisol yang berdampak buruk pada tekanan darah dan lambung.",
-        steps = listOf("Latihan pernapasan 4-7-8 selama 5 menit", "Jalan kaki santai 15 menit setiap pagi", "Jurnal harian untuk meluapkan beban pikiran", "Batasi konsumsi berita negatif sebelum tidur")
-    )
-)
-
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -149,18 +106,16 @@ fun HomeScreen(
     onNavigateToPersona: () -> Unit,
     onNavigateToTools: () -> Unit
 ) {
-    val isLoaded by viewModel.isModelLoaded.collectAsState()
-    val modelName by viewModel.activeModelName.collectAsState()
-    val ragCount by viewModel.ragDocumentCount.collectAsState()
-    val persona by viewModel.personaConfig.collectAsState()
+    val isLoaded by viewModel.isModelLoaded.collectAsStateWithLifecycle()
+    val modelName by viewModel.activeModelName.collectAsStateWithLifecycle()
+    val ragCount by viewModel.ragDocumentCount.collectAsStateWithLifecycle()
+    val persona by viewModel.personaConfig.collectAsStateWithLifecycle()
 
     val activeAgent = remember(persona.selectedAgentId) {
         AgentRegistry.getAgentById(persona.selectedAgentId)
     }
 
-    var quickQuery by remember { mutableStateOf("") }
     var selectedCluster by remember { mutableStateOf("Semua (46)") }
-    var selectedRec by remember { mutableStateOf<HealthRecommendation?>(null) }
 
     val filteredSpecialists = remember(selectedCluster) {
         when (selectedCluster) {
@@ -205,14 +160,14 @@ fun HomeScreen(
             )
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
-        ) {
+        AdaptiveContent(modifier = Modifier.padding(padding)) { widthClass ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
+            ) {
             // Status Card with Edge AI Glow
             item {
                 StatusBannerCard(
@@ -277,102 +232,6 @@ fun HomeScreen(
                                     contentDescription = "Ubah",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Quick Symptom Triage Search Bar
-            item {
-                Text(
-                    text = "Triase Gejala Cepat",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = quickQuery,
-                    onValueChange = { quickQuery = it },
-                    placeholder = { Text("Ketik keluhan Anda (misal: demam 3 hari, nyeri ulu hati)...") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Cari",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    trailingIcon = {
-                        IconButton(
-                            onClick = {
-                                if (quickQuery.isNotBlank()) {
-                                    viewModel.createNewChat { sessionId ->
-                                        onNavigateToChat(sessionId)
-                                    }
-                                }
-                            },
-                            enabled = quickQuery.isNotBlank(),
-                            modifier = Modifier.springBounceClick()
-                        ) {
-                            Surface(
-                                color = if (quickQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                shape = CircleShape,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = "Kirim",
-                                        tint = if (quickQuery.isNotBlank()) Color.White else MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // Daily Health Recommendations Carousel
-            item {
-                Text(
-                    text = "Rekomendasi Kesehatan Harian",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(DAILY_RECOMMENDATIONS) { rec ->
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = rec.color),
-                            modifier = Modifier
-                                .width(220.dp)
-                                .springBounceClick()
-                                .clickable { selectedRec = rec }
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Text(rec.emoji, fontSize = 24.sp)
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = rec.title,
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
-                                )
-                                Text(
-                                    text = rec.sub,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color.White.copy(alpha = 0.8f)
                                 )
                             }
                         }

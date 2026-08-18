@@ -33,8 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.MarkdownText
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.UrgencyBadge
@@ -57,8 +58,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import javax.inject.Inject
 
-class SkinViewModel(
+@HiltViewModel
+class SkinViewModel @Inject constructor(
     private val skinRepository: SkinRepository,
     private val analyzeSkinUseCase: AnalyzeSkinUseCase
 ) : ViewModel() {
@@ -101,15 +104,6 @@ class SkinViewModel(
         _currentAnalysis.value = null
     }
 
-    class Factory(
-        private val skinRepository: SkinRepository,
-        private val analyzeSkinUseCase: AnalyzeSkinUseCase
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return SkinViewModel(skinRepository, analyzeSkinUseCase) as T
-        }
-    }
 }
 
 val BODY_PARTS = listOf(
@@ -128,8 +122,8 @@ fun SkinScanScreen(
     var capturedImagePath by remember { mutableStateOf<String?>(null) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
 
-    val currentAnalysis by viewModel.currentAnalysis.collectAsState()
-    val isAnalyzing by viewModel.isAnalyzing.collectAsState()
+    val currentAnalysis by viewModel.currentAnalysis.collectAsStateWithLifecycle()
+    val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
 
     // Camera Capture Launcher
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -350,8 +344,8 @@ fun SkinLineageScreen(
     onNavigateBack: () -> Unit,
     onNavigateToScan: () -> Unit
 ) {
-    val records by viewModel.allRecords.collectAsState()
-    val selectedPart by viewModel.selectedBodyPart.collectAsState()
+    val records by viewModel.allRecords.collectAsStateWithLifecycle()
+    val selectedPart by viewModel.selectedBodyPart.collectAsStateWithLifecycle()
 
     val filteredRecords = remember(records, selectedPart) {
         if (selectedPart == "Semua") records else records.filter { it.bodyPart == selectedPart }

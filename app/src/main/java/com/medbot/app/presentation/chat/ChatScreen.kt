@@ -29,9 +29,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.*
 import com.medbot.app.core.designsystem.theme.*
 import com.medbot.app.domain.agents.AgentRegistry
@@ -47,8 +48,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
+import javax.inject.Inject
 
-class ChatViewModel(
+@HiltViewModel
+class ChatViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
     private val sendMessageUseCase: SendMessageUseCase,
     private val userPreferencesRepository: UserPreferencesRepository
@@ -129,16 +132,6 @@ class ChatViewModel(
         }
     }
 
-    class Factory(
-        private val chatRepository: ChatRepository,
-        private val sendMessageUseCase: SendMessageUseCase,
-        private val userPreferencesRepository: UserPreferencesRepository
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ChatViewModel(chatRepository, sendMessageUseCase, userPreferencesRepository) as T
-        }
-    }
 }
 
 val QUICK_SYMPTOMS = listOf(
@@ -157,12 +150,12 @@ fun ChatScreen(
     onNavigateToPersona: () -> Unit
 ) {
     val context = LocalContext.current
-    val currentSessionId by viewModel.currentSessionId.collectAsState()
-    val sessions by viewModel.sessions.collectAsState()
-    val messages by viewModel.messages.collectAsState()
-    val isGenerating by viewModel.isGenerating.collectAsState()
-    val streamingText by viewModel.streamingText.collectAsState()
-    val persona by viewModel.personaConfig.collectAsState()
+    val currentSessionId by viewModel.currentSessionId.collectAsStateWithLifecycle()
+    val sessions by viewModel.sessions.collectAsStateWithLifecycle()
+    val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val isGenerating by viewModel.isGenerating.collectAsStateWithLifecycle()
+    val streamingText by viewModel.streamingText.collectAsStateWithLifecycle()
+    val persona by viewModel.personaConfig.collectAsStateWithLifecycle()
 
     var inputText by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<String?>(null) }

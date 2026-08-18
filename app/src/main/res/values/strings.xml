@@ -1,4 +1,41 @@
 <resources>
     <string name="app_name">MedBot</string>
     <string name="app_tagline">Asisten Medis On-Device &amp; RAG Klinis</string>
+
+    <string name="action_back">Kembali</string>
+    <string name="action_close">Tutup</string>
+    <string name="action_delete">Hapus</string>
+    <string name="action_manage_model">Kelola Model</string>
+    <string name="action_open_rag">Buka RAG</string>
+    <string name="action_close_citations">Tutup Rujukan</string>
+    <string name="nav_home">Beranda</string>
+    <string name="nav_skin">Kulit</string>
+    <string name="nav_knowledge">RAG</string>
+    <string name="nav_tools">Alat Medis</string>
+    <string name="status_ai_ready">AI Edge Siap • Offline di perangkat</string>
+    <string name="status_model_not_loaded">Model AI Belum Dimuat</string>
+    <string name="status_active_model">Aktif: %1$s</string>
+    <string name="status_model_source">Gunakan model dari SAF atau unduh melalui Model Manager</string>
+    <string name="status_rag_count">Basis pengetahuan: %1$d dokumen terindeks</string>
+    <string name="urgency_format">Urgensi: %1$s</string>
+    <string name="citation_title">Rujukan Klinis Resmi</string>
+    <string name="citation_page">%1$s (Hal. %2$d)</string>
+    <string name="citation_section">Bagian: %1$s</string>
+    <string name="streaming_typing">AI lokal sedang mengetik…</string>
+
+    <string name="model_status_verifying">Memverifikasi berkas model…</string>
+    <string name="model_status_error">Unduhan model gagal</string>
+    <string name="model_error_detail">Kesalahan: %1$s</string>
+    <string name="model_list_unavailable">Model online belum tersedia.</string>
+
+    <string name="knowledge_error">Pemrosesan dokumen gagal</string>
+    <string name="knowledge_no_documents">Belum ada dokumen yang diindeks. Pilih berkas dari SAF untuk memulai.</string>
+    <string name="knowledge_no_search_results">Tidak ada hasil untuk kueri ini.</string>
+
+    <string name="calculator_required_input">Lengkapi semua masukan sebelum menghitung.</string>
+    <string name="calculator_invalid_input">Masukan harus berupa angka yang valid.</string>
+    <string name="calculator_running">Menghitung…</string>
+    <string name="calculator_no_lab_tests">Data parameter laboratorium belum tersedia.</string>
+    <string name="calculator_no_drugs">Data obat belum tersedia.</string>
+    <string name="reminder_title_required">Masukkan judul pengingat.</string>
 </resources>

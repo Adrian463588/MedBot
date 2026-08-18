@@ -1,92 +1,83 @@
 package com.medbot.app.data.rag
 
-import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.Locale
 
-data class ParsedPage(
-    val pageNumber: Int,
-    val text: String,
-    val sectionTitle: String = ""
-)
+data class ParsedPage(val pageNumber: Int, val text: String, val sectionTitle: String = "")
 
 data class ParsedDocument(
     val fileName: String,
     val pages: List<ParsedPage>,
-    val totalPageCount: Int
+    val totalPageCount: Int,
+    val byteSize: Long,
+    val sha256: String
 )
 
+/** Parses real plain-text and Markdown input. PDF/DOCX need a wired parser dependency. */
 class DocumentParser {
-
     fun parse(inputStream: InputStream, fileName: String, mimeType: String): ParsedDocument {
-        val pages = mutableListOf<ParsedPage>()
-
-        if (mimeType.contains("pdf") || fileName.endsWith(".pdf", ignoreCase = true)) {
-            // PDF text extractor: splits stream by page markers or paragraph blocks
-            val content = inputStream.bufferedReader().use { it.readText() }
-            val cleanContent = sanitizeText(content)
-            val virtualPages = splitIntoVirtualPages(cleanContent, charsPerPage = 1800)
-            
-            virtualPages.forEachIndexed { index, pageText ->
-                val section = extractSectionHeader(pageText)
-                pages.add(ParsedPage(pageNumber = index + 1, text = pageText, sectionTitle = section))
-            }
-        } else {
-            // Plain text or Markdown parser
-            val lines = mutableListOf<String>()
-            BufferedReader(InputStreamReader(inputStream)).useLines { lineSeq ->
-                lines.addAll(lineSeq)
-            }
-            val text = lines.joinToString("\n")
-            val cleanContent = sanitizeText(text)
-            val virtualPages = splitIntoVirtualPages(cleanContent, charsPerPage = 1500)
-
-            virtualPages.forEachIndexed { index, pageText ->
-                val section = extractSectionHeader(pageText)
-                pages.add(ParsedPage(pageNumber = index + 1, text = pageText, sectionTitle = section))
-            }
+        val extension = fileName.substringAfterLast('.', "").lowercase(Locale.US)
+        val isText = extension == "txt" || extension == "md" || mimeType.lowercase(Locale.US).startsWith("text/")
+        if (!isText || extension == "pdf" || extension == "docx") {
+            throw RagProcessingException(
+                RagFailureCode.PARSER_UNAVAILABLE,
+                "No real parser is wired for .$extension"
+            )
         }
 
-        if (pages.isEmpty()) {
-            pages.add(ParsedPage(pageNumber = 1, text = "Dokumen kosong", sectionTitle = "Dokumen"))
-        }
+        val bytes = readBounded(inputStream)
+        if (bytes.isEmpty()) throw RagProcessingException(RagFailureCode.INVALID_DOCUMENT, "Document is empty")
+        val text = String(bytes, StandardCharsets.UTF_8)
+            .replace("\u0000", "")
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .trim()
+        if (text.isBlank()) throw RagProcessingException(RagFailureCode.INVALID_DOCUMENT, "Document has no text")
 
+        val section = text.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("#") }
+            ?.trimStart('#', ' ', '\t')
+            ?.take(120)
+            .orEmpty()
+        val page = ParsedPage(1, text, section.ifBlank { fileName })
         return ParsedDocument(
             fileName = fileName,
-            pages = pages,
-            totalPageCount = pages.size
+            pages = listOf(page),
+            totalPageCount = 1,
+            byteSize = bytes.size.toLong(),
+            sha256 = sha256(bytes)
         )
     }
 
-    private fun sanitizeText(input: String): String {
-        return input.replace("\u0000", "")
-            .replace("\\r\\n", "\n")
-            .replace("\\r", "\n")
-            .trim()
-    }
-
-    private fun splitIntoVirtualPages(text: String, charsPerPage: Int): List<String> {
-        if (text.length <= charsPerPage) return listOf(text)
-        val pages = mutableListOf<String>()
-        var start = 0
-        while (start < text.length) {
-            val end = (start + charsPerPage).coerceAtMost(text.length)
-            // Break at newline or space if possible
-            val breakPoint = if (end < text.length) {
-                val lastBreak = text.lastIndexOf('\n', end)
-                if (lastBreak > start + (charsPerPage / 2)) lastBreak else end
-            } else end
-            val slice = text.substring(start, breakPoint).trim()
-            if (slice.isNotEmpty()) {
-                pages.add(slice)
+    private fun readBounded(inputStream: InputStream): ByteArray {
+        val output = ByteArrayOutputStream()
+        inputStream.use { input ->
+            val buffer = ByteArray(BUFFER_SIZE)
+            var total = 0L
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                total += count
+                if (total > MAX_DOCUMENT_BYTES) {
+                    throw RagProcessingException(RagFailureCode.PARSER_UNAVAILABLE, "Document exceeds parser size limit")
+                }
+                output.write(buffer, 0, count)
             }
-            start = breakPoint
         }
-        return pages
+        return output.toByteArray()
     }
 
-    private fun extractSectionHeader(pageText: String): String {
-        val firstLine = pageText.lines().firstOrNull { it.isNotBlank() } ?: "Bagian Umum"
-        return firstLine.take(50).replace("#", "").trim()
+    private fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
+        .digest(bytes)
+        .joinToString("") { "%02x".format(it) }
+
+    companion object {
+        private const val BUFFER_SIZE = 64 * 1024
+        private const val MAX_DOCUMENT_BYTES = 32L * 1024L * 1024L
     }
 }

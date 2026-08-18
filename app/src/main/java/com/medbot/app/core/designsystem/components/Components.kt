@@ -6,10 +6,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -33,9 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.medbot.app.R
 import com.medbot.app.core.designsystem.theme.*
 import com.medbot.app.domain.model.Citation
 import com.medbot.app.domain.model.UrgencyLevel
@@ -43,6 +52,10 @@ import com.medbot.app.domain.model.UrgencyLevel
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 /**
  * Microinteraction modifier: Bouncing scale animation on touch press with tactile haptic feedback.
@@ -54,9 +67,7 @@ fun Modifier.springBounceClick(scaleDown: Float = 0.94f): Modifier = Modifier.co
 
     LaunchedEffect(isPressed) {
         if (isPressed) {
-            try {
-                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-            } catch (_: Exception) {}
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
 
@@ -68,7 +79,22 @@ fun Modifier.springBounceClick(scaleDown: Float = 0.94f): Modifier = Modifier.co
         ),
         label = "bounce"
     )
-    this.scale(scale)
+    this
+        .pointerInput(interactionSource) {
+            awaitEachGesture {
+                val down = awaitFirstDown(
+                    requireUnconsumed = false,
+                    pass = PointerEventPass.Initial
+                )
+                val press = PressInteraction.Press(down.position)
+                interactionSource.emit(press)
+                val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
+                interactionSource.emit(
+                    if (up == null) PressInteraction.Cancel(press) else PressInteraction.Release(press)
+                )
+            }
+        }
+        .scale(scale)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,22 +111,21 @@ fun MedBotTopAppBar(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
+                        fontWeight = FontWeight.Bold
                     ),
                     color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!subtitle.isNullOrBlank()) {
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         ),
                         color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -124,10 +149,10 @@ fun MedBotBottomBar(
         tonalElevation = 4.dp
     ) {
         val items = listOf(
-            Triple("home", "Beranda", Icons.Default.Home to Icons.Outlined.Home),
-            Triple("skin_lineage", "Skin", Icons.Default.Face to Icons.Outlined.Face),
-            Triple("knowledge", "RAG", Icons.AutoMirrored.Filled.MenuBook to Icons.AutoMirrored.Outlined.MenuBook),
-            Triple("tools", "Alat Medis", Icons.Default.MedicalServices to Icons.Outlined.MedicalServices)
+            Triple("home", stringResource(R.string.nav_home), Icons.Default.Home to Icons.Outlined.Home),
+            Triple("skin_lineage", stringResource(R.string.nav_skin), Icons.Default.Face to Icons.Outlined.Face),
+            Triple("knowledge", stringResource(R.string.nav_knowledge), Icons.AutoMirrored.Filled.MenuBook to Icons.AutoMirrored.Outlined.MenuBook),
+            Triple("tools", stringResource(R.string.nav_tools), Icons.Default.MedicalServices to Icons.Outlined.MedicalServices)
         )
 
         items.forEach { (route, label, icons) ->
@@ -190,55 +215,42 @@ fun StatusBannerCard(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MedicalGradient)
                 .padding(18.dp)
         ) {
             Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .background(
-                                    color = if (isModelLoaded) UrgencyLowGreen.copy(alpha = pulseAlpha) else UrgencyMediumYellow,
-                                    shape = CircleShape
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (isModelLoaded) "AI Edge Ready • 100% Offline" else "Model AI Belum Dimuat",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        )
+                if (maxWidth < 500.dp) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        StatusBannerTitle(isModelLoaded, pulseAlpha)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        StatusBannerAction(onManageModel)
                     }
-                    Surface(
-                        color = Color.White.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier
-                            .springBounceClick()
-                            .clickable { onManageModel() }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Kelola Model ›",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        StatusBannerTitle(
+                            isModelLoaded = isModelLoaded,
+                            pulseAlpha = pulseAlpha,
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        StatusBannerAction(onManageModel)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = if (isModelLoaded) "Aktif: ${modelName ?: "Gemma 4 E2B IT"}" else "Gunakan model dari SAF atau Unduh di Model Manager",
+                    text = when {
+                        isModelLoaded && modelName != null -> stringResource(R.string.status_active_model, modelName)
+                        isModelLoaded -> stringResource(R.string.status_active_model_unknown)
+                        else -> stringResource(R.string.status_model_source)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.9f)
                 )
@@ -248,35 +260,88 @@ fun StatusBannerCard(
                     color = Color.White.copy(alpha = 0.25f)
                 )
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.LibraryBooks,
-                            contentDescription = "RAG",
+                            contentDescription = stringResource(R.string.nav_knowledge),
                             modifier = Modifier.size(18.dp),
                             tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Knowledge Base: $ragDocCount Dokumen Terindeks",
+                            text = stringResource(R.string.status_rag_count, ragDocCount),
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                             color = Color.White
                         )
                     }
                     Text(
-                        text = "Buka RAG ›",
+                        text = stringResource(R.string.action_open_rag),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = MedicalMint,
                         modifier = Modifier
+                            .align(Alignment.End)
+                            .heightIn(min = 48.dp)
+                            .wrapContentHeight(Alignment.CenterVertically)
                             .springBounceClick()
-                            .clickable { onManageRag() }
+                            .clickable(role = Role.Button) { onManageRag() }
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StatusBannerTitle(
+    isModelLoaded: Boolean,
+    pulseAlpha: Float,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(
+                    color = if (isModelLoaded) UrgencyLowGreen.copy(alpha = pulseAlpha) else UrgencyMediumYellow,
+                    shape = CircleShape
+                )
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(
+                if (isModelLoaded) R.string.status_ai_ready else R.string.status_model_not_loaded
+            ),
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        )
+    }
+}
+
+@Composable
+private fun StatusBannerAction(onClick: () -> Unit) {
+    Surface(
+        color = Color.White.copy(alpha = 0.2f),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .springBounceClick()
+            .clickable(role = Role.Button, onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stringResource(R.string.action_manage_model),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
         }
     }
 }
@@ -344,7 +409,7 @@ fun UrgencyBadge(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Urgensi: ${urgency.labelId}",
+                text = stringResource(R.string.urgency_format, urgency.labelId),
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = bg
             )
@@ -364,17 +429,22 @@ fun CitationsDialog(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .heightIn(max = 600.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                        contentDescription = "Rujukan",
+                        contentDescription = stringResource(R.string.citation_title),
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Rujukan Klinis Resmi",
+                        text = stringResource(R.string.citation_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
@@ -389,13 +459,17 @@ fun CitationsDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "${index + 1}. ${citation.documentTitle} (Hal. ${citation.pageNumber})",
+                                text = stringResource(
+                                    R.string.citation_page,
+                                    "${index + 1}. ${citation.documentTitle}",
+                                    citation.pageNumber
+                                ),
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary
                             )
                             if (citation.sectionTitle.isNotBlank()) {
                                 Text(
-                                    text = "Bagian: ${citation.sectionTitle}",
+                                    text = stringResource(R.string.citation_section, citation.sectionTitle),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -416,7 +490,7 @@ fun CitationsDialog(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().springBounceClick()
                 ) {
-                    Text("Tutup Rujukan")
+                    Text(stringResource(R.string.action_close_citations))
                 }
             }
         }
@@ -450,12 +524,13 @@ fun MarkdownText(
                     )
                 }
                 line.startsWith("- ") || line.startsWith("* ") -> {
-                    Row(modifier = Modifier.padding(start = 4.dp, top = 2.dp, bottom = 2.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 2.dp, bottom = 2.dp)) {
                         Text("• ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         Text(
                             text = line.substring(2).trim(),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = color
+                            color = color,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -515,7 +590,7 @@ fun StreamingTypewriterText(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Gemma AI Sedang Mengetik...",
+                    text = stringResource(R.string.streaming_typing),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                 )
@@ -545,11 +620,7 @@ fun InteractiveSkinSplitComparator(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("🔍", fontSize = 16.sp)
                     Spacer(modifier = Modifier.width(6.dp))
@@ -558,6 +629,7 @@ fun InteractiveSkinSplitComparator(
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
+                Spacer(modifier = Modifier.height(4.dp))
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     shape = RoundedCornerShape(12.dp)
@@ -654,7 +726,13 @@ fun InteractiveSkinSplitComparator(
                 value = splitRatio,
                 onValueChange = { splitRatio = it },
                 valueRange = 0.05f..0.95f,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .semantics {
+                        contentDescription = stringResource(R.string.comparator_slider_description)
+                        stateDescription = "${(splitRatio * 100).toInt()}%"
+                    },
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -664,4 +742,3 @@ fun InteractiveSkinSplitComparator(
         }
     }
 }
-

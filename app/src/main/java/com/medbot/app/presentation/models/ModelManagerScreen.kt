@@ -24,8 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
@@ -41,8 +42,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class ModelViewModel(
+@HiltViewModel
+class ModelViewModel @Inject constructor(
     private val modelRepository: ModelRepository,
     private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
@@ -111,15 +114,6 @@ class ModelViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     }
 
-    class Factory(
-        private val modelRepository: ModelRepository,
-        private val userPreferencesRepository: UserPreferencesRepository
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ModelViewModel(modelRepository, userPreferencesRepository) as T
-        }
-    }
 }
 
 @Composable
@@ -127,10 +121,10 @@ fun ModelManagerScreen(
     viewModel: ModelViewModel,
     onNavigateBack: () -> Unit
 ) {
-    val safUri by viewModel.safFolderUri.collectAsState()
-    val isLoaded by viewModel.isModelLoaded.collectAsState()
-    val modelName by viewModel.activeModelName.collectAsState()
-    val selectedBackend by viewModel.selectedBackend.collectAsState()
+    val safUri by viewModel.safFolderUri.collectAsStateWithLifecycle()
+    val isLoaded by viewModel.isModelLoaded.collectAsStateWithLifecycle()
+    val modelName by viewModel.activeModelName.collectAsStateWithLifecycle()
+    val selectedBackend by viewModel.selectedBackend.collectAsStateWithLifecycle()
 
     // Native SAF OpenDocumentTree Launcher
     val safFolderPickerLauncher = rememberLauncherForActivityResult(
@@ -268,7 +262,8 @@ fun ModelDownloadItemCard(
     viewModel: ModelViewModel,
     isLoaded: Boolean
 ) {
-    val progressState by viewModel.getDownloadFlow(manifest.id).collectAsState()
+    val progressFlow = remember(manifest.id) { viewModel.getDownloadFlow(manifest.id) }
+    val progressState by progressFlow.collectAsStateWithLifecycle()
     val progress = progressState ?: DownloadProgress(manifest.id, 0, manifest.sizeBytes, 0, ModelDownloadStatus.NOT_DOWNLOADED)
 
     val sizeMb = remember(manifest.sizeBytes) {
