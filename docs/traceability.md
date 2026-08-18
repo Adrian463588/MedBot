@@ -52,7 +52,7 @@ Status:
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| `git diff --check` | PENDING | Run after final docs/source staging review. |
+| `git diff --check` | PASS | Clean on the staged diff and verified again before delivery on 2026-08-19. |
 | `:app:lintDebug --rerun-tasks` | PASS | Completed 2026-08-19; lint report generated at `app/build/reports/lint-results-debug.html`. |
 | `:app:testDebugUnitTest --rerun-tasks` | PASS | 44 tests completed, 1 skipped, 0 failures on 2026-08-19. |
 | `:app:assembleDebug --rerun-tasks` | PASS | Debug APK assembled on 2026-08-19. |
