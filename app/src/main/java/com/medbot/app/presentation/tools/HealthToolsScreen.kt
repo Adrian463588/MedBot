@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -234,7 +235,7 @@ fun DrugTabContent(
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.CompareArrows, contentDescription = "Cek")
+                        Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = "Cek")
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Periksa Interaksi Obat")
                     }

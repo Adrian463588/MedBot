@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +23,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
+import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.agents.AgentRegistry
 import com.medbot.app.domain.model.*
 import com.medbot.app.domain.repository.UserPreferencesRepository
@@ -104,8 +106,8 @@ fun PersonaConfigScreen(
                 title = "Personalisasi Persona AI",
                 subtitle = "Pilih Dokter Spesialis & Gaya Komunikasi",
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 actions = {
