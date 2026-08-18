@@ -157,6 +157,7 @@ fun SkinScanScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             MedBotTopAppBar(
                 title = "Skin Lineage & Diagnosis",
@@ -357,6 +358,7 @@ fun SkinLineageScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             MedBotTopAppBar(
                 title = "Linimasa Kulit (Skin Lineage)",

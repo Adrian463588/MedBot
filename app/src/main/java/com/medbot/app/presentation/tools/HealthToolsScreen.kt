@@ -131,6 +131,7 @@ fun HealthToolsScreen(
     val tabs = listOf("Obat & Interaksi", "Evaluasi Lab", "Kalkulator Klinis", "Pengingat")
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             MedBotTopAppBar(
                 title = "Perkakas Medis Terpadu",
@@ -148,10 +149,12 @@ fun HealthToolsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = selectedTab,
+                edgePadding = 16.dp,
                 containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+                contentColor = MaterialTheme.colorScheme.primary,
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) }
             ) {
                 tabs.forEachIndexed { index, title ->
                     Tab(

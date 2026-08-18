@@ -182,6 +182,7 @@ fun KnowledgeBaseScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             MedBotTopAppBar(
                 title = "Knowledge Base RAG",

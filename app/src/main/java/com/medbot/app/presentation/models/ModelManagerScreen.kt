@@ -142,6 +142,7 @@ fun ModelManagerScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             MedBotTopAppBar(
                 title = "Model Manager & Edge AI",

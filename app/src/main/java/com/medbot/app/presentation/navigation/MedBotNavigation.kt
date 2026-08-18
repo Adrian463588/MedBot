@@ -37,14 +37,14 @@ fun MedBotNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
 
-    val bottomBarRoutes = listOf("home", "chat", "skin_lineage", "knowledge", "tools")
-    val shouldShowBottomBar = bottomBarRoutes.any { currentRoute.startsWith(it) }
+    val bottomBarRoutes = listOf("home", "skin_lineage", "knowledge", "tools")
+    val shouldShowBottomBar = bottomBarRoutes.contains(currentRoute)
 
     Scaffold(
         bottomBar = {
             if (shouldShowBottomBar) {
                 MedBotBottomBar(
-                    currentRoute = currentRoute.substringBefore("?"),
+                    currentRoute = currentRoute,
                     onNavigate = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.startDestinationId) {
@@ -64,7 +64,7 @@ fun MedBotNavigation(
             startDestination = "home",
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding())
+                .padding(bottom = if (shouldShowBottomBar) innerPadding.calculateBottomPadding() else 0.dp)
         ) {
             composable("home") {
                 val homeViewModel: HomeViewModel = viewModel(

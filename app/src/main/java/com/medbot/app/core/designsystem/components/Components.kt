@@ -121,12 +121,10 @@ fun MedBotBottomBar(
 ) {
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 6.dp,
-        modifier = Modifier.height(72.dp)
+        tonalElevation = 4.dp
     ) {
         val items = listOf(
             Triple("home", "Beranda", Icons.Default.Home to Icons.Outlined.Home),
-            Triple("chat", "Chatbot", Icons.AutoMirrored.Filled.Chat to Icons.AutoMirrored.Outlined.Chat),
             Triple("skin_lineage", "Skin", Icons.Default.Face to Icons.Outlined.Face),
             Triple("knowledge", "RAG", Icons.AutoMirrored.Filled.MenuBook to Icons.AutoMirrored.Outlined.MenuBook),
             Triple("tools", "Alat Medis", Icons.Default.MedicalServices to Icons.Outlined.MedicalServices)

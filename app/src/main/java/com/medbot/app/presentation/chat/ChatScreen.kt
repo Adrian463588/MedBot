@@ -205,7 +205,7 @@ fun ChatScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.ime,
+        contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.ime),
         topBar = {
             MedBotTopAppBar(
                 title = activeAgent.displayNameId,
@@ -273,18 +273,18 @@ fun ChatScreen(
                     item {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.fillMaxWidth().padding(top = 28.dp)
+                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)
                         ) {
                             Surface(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = CircleShape,
-                                modifier = Modifier.size(72.dp)
+                                modifier = Modifier.size(56.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text("🩺", fontSize = 36.sp)
+                                    Text("🩺", fontSize = 28.sp)
                                 }
                             }
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
                                 text = "Konsultasi ${activeAgent.displayNameId}",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
@@ -295,7 +295,7 @@ fun ChatScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            Spacer(modifier = Modifier.height(20.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "Pertanyaan Medis Populer:",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -303,25 +303,18 @@ fun ChatScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            QUICK_SYMPTOMS.forEach { prompt ->
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp)
-                                        .springBounceClick()
-                                        .clickable { viewModel.sendMessage(prompt) }
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-                                    ) {
-                                        Text("💬", fontSize = 14.sp)
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(text = prompt, style = MaterialTheme.typography.bodySmall)
-                                    }
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(QUICK_SYMPTOMS) { prompt ->
+                                    SuggestionChip(
+                                        onClick = { viewModel.sendMessage(prompt) },
+                                        label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
+                                        icon = { Text("💬", fontSize = 12.sp) },
+                                        modifier = Modifier.springBounceClick()
+                                    )
                                 }
                             }
                         }

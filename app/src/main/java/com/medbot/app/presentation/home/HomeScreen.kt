@@ -176,6 +176,7 @@ fun HomeScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             MedBotTopAppBar(
                 title = "MedBot On-Device",
