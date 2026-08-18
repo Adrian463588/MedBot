@@ -19,13 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -103,6 +103,42 @@ val CLINICAL_CLUSTERS = listOf(
     "Saraf & Rehabilitasi"
 )
 
+data class HealthRecommendation(
+    val title: String,
+    val sub: String,
+    val emoji: String,
+    val color: Color,
+    val description: String,
+    val steps: List<String>
+)
+
+val DAILY_RECOMMENDATIONS = listOf(
+    HealthRecommendation(
+        title = "Pola Tidur Sehat",
+        sub = "Program Pemulihan 7 Hari",
+        emoji = "🌙",
+        color = Color(0xFF1E293B),
+        description = "Tidur berkualitas 7-8 jam sangat penting untuk perbaikan sel imun, fungsi kognitif, dan metabolisme hormon.",
+        steps = listOf("Tetapkan jam tidur teratur setiap malam", "Hindari layar HP 1 jam sebelum tidur", "Pastikan kamar sejuk dan gelap", "Hindari kafein setelah jam 14:00")
+    ),
+    HealthRecommendation(
+        title = "Nutrisi Seimbang & Energi",
+        sub = "Pedoman Gizi Seimbang",
+        emoji = "🥗",
+        color = Color(0xFF0D7C66),
+        description = "Gizi seimbang kaya serat dan antioksidan memberi energi berkelanjutan serta mencegah penyakit metabolik.",
+        steps = listOf("Penuhi separuh piring dengan sayur dan buah", "Pilih karbohidrat kompleks (nasi merah/gandum)", "Minum 8 gelas air putih setiap hari", "Kurangi makanan tinggi gula dan garam")
+    ),
+    HealthRecommendation(
+        title = "Manajemen Stres & Pikiran",
+        sub = "Relaksasi Pernapasan",
+        emoji = "🧘",
+        color = Color(0xFF2563EB),
+        description = "Stres kronis memicu peningkatan hormon kortisol yang berdampak buruk pada tekanan darah dan lambung.",
+        steps = listOf("Latihan pernapasan 4-7-8 selama 5 menit", "Jalan kaki santai 15 menit setiap pagi", "Jurnal harian untuk meluapkan beban pikiran", "Batasi konsumsi berita negatif sebelum tidur")
+    )
+)
+
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -124,6 +160,7 @@ fun HomeScreen(
 
     var quickQuery by remember { mutableStateOf("") }
     var selectedCluster by remember { mutableStateOf("Semua (46)") }
+    var selectedRec by remember { mutableStateOf<HealthRecommendation?>(null) }
 
     val filteredSpecialists = remember(selectedCluster) {
         when (selectedCluster) {
@@ -151,7 +188,7 @@ fun HomeScreen(
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
                             shape = CircleShape,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(38.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
@@ -256,7 +293,7 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = quickQuery,
                     onValueChange = { quickQuery = it },
-                    placeholder = { Text("Ketik keluhan Anda (misal: demam 3 hari, ruam gatal)...") },
+                    placeholder = { Text("Ketik keluhan Anda (misal: demam 3 hari, nyeri ulu hati)...") },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
@@ -301,6 +338,45 @@ fun HomeScreen(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+
+            // Daily Health Recommendations Carousel
+            item {
+                Text(
+                    text = "Rekomendasi Kesehatan Harian",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(DAILY_RECOMMENDATIONS) { rec ->
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = rec.color),
+                            modifier = Modifier
+                                .width(220.dp)
+                                .springBounceClick()
+                                .clickable { selectedRec = rec }
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(rec.emoji, fontSize = 24.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = rec.title,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = rec.sub,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             // 2x2 Feature Modules Grid
@@ -365,7 +441,7 @@ fun HomeScreen(
             // 46 Specialist Doctors Cluster
             item {
                 Text(
-                    text = "46 Dokter Spesialis Medis",
+                    text = "46 Dokter Spesialis Medis Terpadu",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -403,6 +479,49 @@ fun HomeScreen(
                                 }
                             }
                         )
+                    }
+                }
+            }
+        }
+
+        // Recommendation Detail Dialog
+        if (selectedRec != null) {
+            val rec = selectedRec!!
+            Dialog(onDismissRequest = { selectedRec = null }) {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(rec.emoji, fontSize = 28.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(rec.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                                Text(rec.sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(rec.description, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text("Langkah Praktis:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        rec.steps.forEach { step ->
+                            Row(modifier = Modifier.padding(vertical = 3.dp)) {
+                                Text("✓ ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                Text(step, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Button(
+                            onClick = { selectedRec = null },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().springBounceClick()
+                        ) {
+                            Text("Mengerti")
+                        }
                     }
                 }
             }

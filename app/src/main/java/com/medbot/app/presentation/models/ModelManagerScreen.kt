@@ -158,17 +158,18 @@ fun ModelManagerScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
         ) {
             // Mode 1: Storage Access Framework (SAF) Folder Loader
             item {
                 Card(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.SdStorage, contentDescription = "SAF", tint = MaterialTheme.colorScheme.primary)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -184,13 +185,13 @@ fun ModelManagerScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(
                                 onClick = {
                                     safFolderPickerLauncher.launch(null)
                                 },
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.springBounceClick()
                             ) {
                                 Icon(Icons.Default.Folder, contentDescription = "Pilih Folder")
@@ -200,7 +201,7 @@ fun ModelManagerScreen(
                             if (safUri != null) {
                                 OutlinedButton(
                                     onClick = { viewModel.setSafFolder(null) },
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.springBounceClick()
                                 ) {
                                     Text("Reset")
@@ -214,11 +215,12 @@ fun ModelManagerScreen(
             // Backend Hardware Accelerator Selector
             item {
                 Card(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Text("Akselerator Inferensi Perangkat", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -273,12 +275,13 @@ fun ModelDownloadItemCard(
     }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -339,7 +342,7 @@ fun ModelDownloadItemCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Action Buttons with microinteraction bounce
             Row(
@@ -350,7 +353,7 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.NOT_DOWNLOADED -> {
                         Button(
                             onClick = { viewModel.startDownload(manifest.id) },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Default.Download, contentDescription = "Unduh")
@@ -361,7 +364,7 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.DOWNLOADING -> {
                         Button(
                             onClick = { viewModel.pauseDownload(manifest.id) },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Default.Pause, contentDescription = "Jeda")
@@ -370,7 +373,7 @@ fun ModelDownloadItemCard(
                         }
                         OutlinedButton(
                             onClick = { viewModel.cancelDownload(manifest.id) },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.springBounceClick()
                         ) {
                             Text("Batal")
@@ -379,7 +382,7 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.PAUSED -> {
                         Button(
                             onClick = { viewModel.startDownload(manifest.id) },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = "Lanjutkan")
@@ -391,7 +394,7 @@ fun ModelDownloadItemCard(
                         if (!isLoaded) {
                             Button(
                                 onClick = { viewModel.loadModel("/data/data/com.medbot.app/files/models/${manifest.id}.litertlm") },
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.springBounceClick()
                             ) {
                                 Icon(Icons.Default.Memory, contentDescription = "Muat ke RAM")
@@ -401,7 +404,7 @@ fun ModelDownloadItemCard(
                         } else {
                             OutlinedButton(
                                 onClick = { viewModel.unloadModel() },
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.springBounceClick()
                             ) {
                                 Text("Lepas dari RAM (Unload)")
@@ -411,7 +414,7 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.ERROR -> {
                         Button(
                             onClick = { viewModel.startDownload(manifest.id) },
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                             modifier = Modifier.springBounceClick()
                         ) {
