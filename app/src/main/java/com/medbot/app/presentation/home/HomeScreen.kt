@@ -136,6 +136,16 @@ fun HomeScreen(
             MedBotTopAppBar(
                 title = "MedBot On-Device",
                 subtitle = "Konsultan Medis AI & Offline RAG",
+                navigationIcon = {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.medbot.app.R.drawable.medbot_logo),
+                        contentDescription = "MedBot Logo",
+                        modifier = Modifier
+                            .padding(start = 12.dp, end = 4.dp)
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    )
+                },
                 actions = {
                     IconButton(
                         onClick = onNavigateToPersona,
