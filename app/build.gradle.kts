@@ -94,6 +94,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.litertlm.android)
+    implementation(libs.pdfbox.android)
 
     // Testing
     testImplementation(libs.junit)

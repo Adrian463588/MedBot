@@ -1,0 +1,118 @@
+{
+  "date": "2026-08-19",
+  "package": "com.medbot.app",
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "acceptance": "PARTIAL_PASS",
+  "deviceMatrix": [
+    {
+      "serial": "RRCN3008VYE",
+      "manufacturer": "samsung",
+      "model": "SM-G988B",
+      "api": 33,
+      "resolution": "1440x3200",
+      "status": "PARTIAL_PASS",
+      "observed": [
+        "fresh install and launch",
+        "bottom navigation to Skin, RAG, and Medical tools",
+        "empty and unavailable states rendered",
+        "UIAutomator dumps captured",
+        "bounded logcat scan found no FATAL EXCEPTION or ANR marker"
+      ]
+    },
+    {
+      "serial": "QSWSEMRKNFZ9LJRC",
+      "status": "BLOCKED",
+      "reason": "Serial was absent from adb devices -l during the run; no physical claim is made."
+    }
+  ],
+  "staticGates": {
+    "lintDebug": "PASS",
+    "testDebugUnitTest": "PASS: 44 tests completed, 1 skipped, 0 failures",
+    "assembleDebug": "PASS",
+    "connectedDebugAndroidTest": "PASS: EvidenceGateComposeTest on SM-G988B - 13, 1 test, 0 failures"
+  },
+  "journeys": [
+    {
+      "name": "launch",
+      "status": "PASS",
+      "evidence": [
+        "docs/e2e/preview/medbot_live_preview-2026-08-19-samsung.png",
+        "docs/e2e/device/medbot_home-2026-08-19-samsung.xml"
+      ]
+    },
+    {
+      "name": "bottom_navigation",
+      "status": "PASS",
+      "evidence": [
+        "docs/e2e/preview/medbot_skin_empty-2026-08-19-samsung.png",
+        "docs/e2e/preview/medbot_rag_empty-2026-08-19-samsung.png",
+        "docs/e2e/preview/medbot_tools_unavailable-2026-08-19-samsung.png"
+      ]
+    },
+    {
+      "name": "persona_id_english_controls",
+      "status": "PASS",
+      "boundary": "Screen and controls rendered; language content/model behavior was not accepted as an AI inference result.",
+      "evidence": ["docs/e2e/preview/medbot_persona-2026-08-19-samsung.png"]
+    },
+    {
+      "name": "model_manager",
+      "status": "UNAVAILABLE",
+      "reason": "No verified official manifest or user-supplied .litertlm file was present; registry remains empty and UI fails closed.",
+      "evidence": ["docs/e2e/preview/medbot_model_manager_unavailable-2026-08-19-samsung.png"]
+    },
+    {
+      "name": "chat_with_real_local_model",
+      "status": "BLOCKED",
+      "reason": "No validated local LiteRT-LM model was available; no canned response or fabricated answer was accepted.",
+      "evidence": ["docs/e2e/preview/medbot_chat_model_blocked-2026-08-19-samsung.png"]
+    },
+    {
+      "name": "rag_with_real_document",
+      "status": "BLOCKED",
+      "reason": "No real SAF-selected document and no verified local embedder were provided; no synthetic Kemenkes document, saf URI, pseudo-page, or hash vector was used.",
+      "evidence": ["docs/e2e/preview/medbot_rag_empty-2026-08-19-samsung.png"]
+    },
+    {
+      "name": "skin_camera_gallery_vision",
+      "status": "UNAVAILABLE",
+      "reason": "No real photo and no initialized local vision model were available; no diagnosis or benign baseline was generated.",
+      "evidence": [
+        "docs/e2e/preview/medbot_skin_empty-2026-08-19-samsung.png",
+        "docs/e2e/preview/medbot_skin_lineage_empty-2026-08-19-samsung.png"
+      ]
+    },
+    {
+      "name": "medical_tools",
+      "status": "PARTIAL_PASS",
+      "reason": "Fresh database correctly exposes unavailable drug/lab catalog and blank clinical inputs; validator unit tests pass. No fabricated catalog or default clinical values were used.",
+      "evidence": ["docs/e2e/preview/medbot_tools_unavailable-2026-08-19-samsung.png"]
+    },
+    {
+      "name": "downloader_resume_checksum",
+      "status": "BLOCKED",
+      "reason": "No trusted manifest/model source was available for a physical download session; implementation is covered by unit contracts only."
+    },
+    {
+      "name": "permissions_reminder_airplane_mode",
+      "status": "BLOCKED",
+      "reason": "Not executed in this bounded run; no permission or connectivity success claim is made."
+    },
+    {
+      "name": "responsive_width_matrix",
+      "status": "BLOCKED",
+      "reason": "Source uses adaptive layouts, but physical checkpoints for 320, 360, 411, 600, and 840+ dp were not available in this run."
+    },
+    {
+      "name": "crash_anr_scan",
+      "status": "PASS",
+      "command": "adb -s RRCN3008VYE logcat -d -v brief | Select-String 'FATAL EXCEPTION|am_crash|ANR in|Process: com.medbot.app|E/AndroidRuntime'",
+      "result": "No matching crash or ANR marker observed during the bounded smoke run."
+    }
+  ],
+  "notes": [
+    "The first install -r retained an older local database with catalog rows; those screenshots were discarded and are not evidence.",
+    "The connected test lifecycle uninstalled the app; the final reinstall was fresh. No pm clear, reset, or destructive data operation was used.",
+    "Static/build/test evidence is intentionally reported separately from physical/model/data acceptance."
+  ]
+}

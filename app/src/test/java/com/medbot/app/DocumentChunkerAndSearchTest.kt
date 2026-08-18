@@ -4,13 +4,14 @@ import com.medbot.app.data.rag.*
 import com.medbot.app.domain.model.DocChunk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.ByteArrayInputStream
 
 class DocumentChunkerAndSearchTest {
 
     @Test
-    fun `DocumentParser parses PDF and text streams with virtual pages`() {
+    fun `DocumentParser parses real text and records source metadata`() {
         val parser = DocumentParser()
         val text = "Judul Dokumen: Hipertensi\n\nHipertensi adalah tekanan darah tinggi di atas 140/90 mmHg."
         val stream = ByteArrayInputStream(text.toByteArray())
@@ -19,24 +20,24 @@ class DocumentChunkerAndSearchTest {
         assertTrue(parsed.pages.isNotEmpty())
         assertEquals(1, parsed.totalPageCount)
         assertTrue(parsed.pages[0].text.contains("Hipertensi"))
+        assertEquals(text.toByteArray().size.toLong(), parsed.byteSize)
+        assertEquals(64, parsed.sha256.length)
     }
 
     @Test
-    fun `LocalEmbedder produces 384-dimensional normalized vector`() {
+    fun `LocalEmbedder reports unavailable without a real local model`() {
         val embedder = LocalEmbedder(dimensions = 384)
-        val vector = embedder.embed("Pasien demam berdarah dengue dengan trombositopenia")
 
-        assertEquals(384, vector.size)
-        var sumSquares = 0.0f
-        for (v in vector) {
-            sumSquares += v * v
+        try {
+            embedder.embed("Pasien demam berdarah dengue dengan trombositopenia")
+            fail("No embedding success may be claimed without a model")
+        } catch (error: RagProcessingException) {
+            assertEquals(RagFailureCode.EMBEDDER_UNAVAILABLE, error.code)
         }
-        assertTrue("Norm should be close to 1.0", Math.abs(sumSquares - 1.0f) < 0.05f)
     }
 
     @Test
-    fun `VectorSearchEngine returns high similarity for matching query and document`() {
-        val embedder = LocalEmbedder(dimensions = 384)
+    fun `VectorSearchEngine ranks measured fixture vectors without embedding claims`() {
         val vectorEngine = VectorSearchEngine()
 
         val docText1 = "Gejala Demam Berdarah Dengue meliputi demam tinggi mendadak dan bintik merah petekie."
@@ -49,7 +50,7 @@ class DocumentChunkerAndSearchTest {
             textContent = docText1,
             pageNumber = 1,
             sectionTitle = "DBD",
-            embedding = embedder.embed(docText1)
+            embedding = floatArrayOf(1f, 0f)
         )
 
         val chunk2 = DocChunk(
@@ -59,18 +60,17 @@ class DocumentChunkerAndSearchTest {
             textContent = docText2,
             pageNumber = 1,
             sectionTitle = "Gigi",
-            embedding = embedder.embed(docText2)
+            embedding = floatArrayOf(0f, 1f)
         )
 
-        val queryVec = embedder.embed("tanda klinis penyakit demam berdarah")
         val results = vectorEngine.searchTopK(
-            queryVector = queryVec,
+            queryVector = floatArrayOf(1f, 0f),
             chunksWithTitle = listOf(chunk1 to "Panduan DBD", chunk2 to "Panduan Gigi"),
             topK = 2
         )
 
         assertTrue(results.isNotEmpty())
         assertEquals("Panduan DBD", results.first().documentTitle)
-        assertTrue(results.first().similarityScore > 0.3f)
+        assertEquals(1f, results.first().similarityScore, 0f)
     }
 }

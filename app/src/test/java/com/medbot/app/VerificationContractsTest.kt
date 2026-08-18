@@ -2,6 +2,8 @@ package com.medbot.app
 
 import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.data.rag.LocalEmbedder
+import com.medbot.app.data.rag.RagFailureCode
+import com.medbot.app.data.rag.RagProcessingException
 import com.medbot.app.data.rag.VectorSearchEngine
 import com.medbot.app.domain.agents.tools.ToolRegistry
 import com.medbot.app.domain.model.DownloadProgress
@@ -9,6 +11,7 @@ import com.medbot.app.domain.model.ModelDownloadStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -43,11 +46,10 @@ class VerificationContractsTest {
     }
 
     @Test
-    fun `model registry entries have inspectable metadata without network access`() {
+    fun `empty model registry does not claim an unverified model is available`() {
         val ids = ModelRegistry.OFFICIAL_MODELS.map { it.id }
 
         assertEquals(ids.size, ids.toSet().size)
-        assertTrue(ids.isNotEmpty())
         ModelRegistry.OFFICIAL_MODELS.forEach { manifest ->
             assertTrue(manifest.id.isNotBlank())
             assertTrue(manifest.downloadUrl.startsWith("https://"))
@@ -55,6 +57,7 @@ class VerificationContractsTest {
             assertTrue(manifest.sha256.matches(Regex("[0-9a-fA-F]{64}")))
             assertTrue(manifest.description.isNotBlank())
         }
+        assertTrue(ModelRegistry.OFFICIAL_MODELS.isEmpty())
         assertEquals(null, ModelRegistry.getManifestById("not-in-registry"))
     }
 
@@ -68,11 +71,22 @@ class VerificationContractsTest {
     }
 
     @Test
-    fun `empty embedding remains an unknown zero vector`() {
-        val vector = LocalEmbedder(dimensions = 8).embed("")
+    fun `embedder reports unavailable state instead of inventing a vector`() {
+        val embedder = LocalEmbedder(dimensions = 8)
 
-        assertEquals(8, vector.size)
-        assertTrue(vector.all { it == 0f })
+        try {
+            embedder.embed("fixture text")
+            fail("Embedding must not be reported without a local model")
+        } catch (error: RagProcessingException) {
+            assertEquals(RagFailureCode.EMBEDDER_UNAVAILABLE, error.code)
+        }
+
+        try {
+            embedder.embed("")
+            fail("Blank text must not produce a vector")
+        } catch (error: RagProcessingException) {
+            assertEquals(RagFailureCode.INVALID_DOCUMENT, error.code)
+        }
     }
 
     @Test

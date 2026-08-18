@@ -1,6 +1,7 @@
 package com.medbot.app.presentation.knowledge
 
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -34,6 +35,7 @@ import com.medbot.app.domain.model.RagDocument
 import com.medbot.app.domain.model.SearchResult
 import com.medbot.app.domain.repository.RagRepository
 import com.medbot.app.domain.usecase.IngestSafDocumentsUseCase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -77,8 +79,12 @@ class KnowledgeViewModel @Inject constructor(
                 if (res.isSuccess) {
                     _ingestMessage.value = "Sukses mengindeks $fileName (${res.getOrNull()?.chunkCount} Chunks Vektor)"
                 } else {
-                    _ingestMessage.value = "Gagal memproses dokumen: ${res.exceptionOrNull()?.message}"
+                    _ingestMessage.value = "${res.exceptionOrNull()?.message ?: "RAG tidak tersedia"}"
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _ingestMessage.value = "RAG tidak tersedia: ${error.message ?: "proses gagal"}"
             } finally {
                 _isIngesting.value = false
             }
@@ -91,8 +97,15 @@ class KnowledgeViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            val results = ragRepository.searchSimilarChunks(query, topK = 4)
-            _searchResults.value = results
+            try {
+                _searchResults.value = ragRepository.searchSimilarChunks(query, topK = 4)
+                _ingestMessage.value = null
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _searchResults.value = emptyList()
+                _ingestMessage.value = "RAG tidak tersedia: ${error.message ?: "embedding lokal belum tersedia"}"
+            }
         }
     }
 
@@ -100,6 +113,10 @@ class KnowledgeViewModel @Inject constructor(
         viewModelScope.launch {
             ragRepository.deleteDocument(docId)
         }
+    }
+
+    fun reportUnavailable(message: String) {
+        _ingestMessage.value = message
     }
 
 }
@@ -114,6 +131,7 @@ fun KnowledgeBaseScreen(
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val isIngesting by viewModel.isIngesting.collectAsStateWithLifecycle()
     val ingestMsg by viewModel.ingestMessage.collectAsStateWithLifecycle()
+    val ingestMessage = ingestMsg
 
     var testQuery by remember { mutableStateOf("") }
 
@@ -124,16 +142,27 @@ fun KnowledgeBaseScreen(
         if (uri != null) {
             val contentResolver = context.contentResolver
             val inputStream = contentResolver.openInputStream(uri)
-            val fileName = uri.lastPathSegment ?: "dokumen_saf.pdf"
-            val mimeType = contentResolver.getType(uri) ?: "application/pdf"
+            val fileName = contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }?.takeIf { it.isNotBlank() }
+            val mimeType = contentResolver.getType(uri).orEmpty()
 
-            if (inputStream != null) {
+            if (inputStream != null && fileName != null) {
                 viewModel.ingestDocumentFromUri(
                     fileName = fileName,
                     fileUri = uri.toString(),
                     mimeType = mimeType,
                     inputStream = inputStream
                 )
+            } else {
+                inputStream?.close()
+                viewModel.reportUnavailable("RAG tidak tersedia: nama atau isi dokumen sumber tidak dapat dibaca.")
             }
         }
     }
@@ -200,34 +229,20 @@ fun KnowledgeBaseScreen(
                         )
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
+                        Button(
+                            onClick = {
+                                safDocPickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "*/*"))
+                            },
+                            enabled = !isIngesting,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().springBounceClick()
                         ) {
-                            Button(
-                                onClick = {
-                                    safDocPickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "*/*"))
-                                },
-                                enabled = !isIngesting,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f).springBounceClick()
-                            ) {
-                                Icon(Icons.Default.UploadFile, contentDescription = "Pilih File")
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Pilih File SAF")
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.ingestSampleClinicalGuide() },
-                                enabled = !isIngesting,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.weight(1f).springBounceClick()
-                            ) {
-                                Text("Panduan Kemenkes")
-                            }
+                            Icon(Icons.Default.UploadFile, contentDescription = "Pilih File")
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Pilih File SAF")
                         }
 
-                        if (isIngesting) {
+            if (isIngesting) {
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
@@ -238,6 +253,26 @@ fun KnowledgeBaseScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
+                        }
+                    }
+
+                    if (!isIngesting && !ingestMessage.isNullOrBlank()) {
+                        val message = ingestMessage.orEmpty()
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            color = if (message.startsWith("Sukses")) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
+                            )
                         }
                     }
                 }

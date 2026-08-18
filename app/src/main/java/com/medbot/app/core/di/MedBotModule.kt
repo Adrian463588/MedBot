@@ -20,6 +20,8 @@ import com.medbot.app.domain.repository.HealthToolsRepository
 import com.medbot.app.domain.repository.ModelRepository
 import com.medbot.app.domain.repository.RagRepository
 import com.medbot.app.domain.repository.SkinRepository
+import com.medbot.app.domain.repository.LocalLlmGateway
+import com.medbot.app.domain.repository.SkinAnalysisGateway
 import com.medbot.app.domain.repository.UserPreferencesRepository
 import com.medbot.app.domain.usecase.AnalyzeSkinUseCase
 import com.medbot.app.domain.usecase.CheckDrugInteractionsUseCase
@@ -53,6 +55,10 @@ object MedBotModule {
 
     @Provides
     @Singleton
+    fun provideLocalLlmGateway(engine: LlmInferenceEngine): LocalLlmGateway = engine
+
+    @Provides
+    @Singleton
     fun provideDownloadManager(application: Application): ModelDownloadManager =
         ModelDownloadManager(application)
 
@@ -64,6 +70,10 @@ object MedBotModule {
     @Provides
     @Singleton
     fun provideSkinDiagnosisEngine(): SkinDiagnosisEngine = SkinDiagnosisEngine()
+
+    @Provides
+    @Singleton
+    fun provideSkinAnalysisGateway(engine: SkinDiagnosisEngine): SkinAnalysisGateway = engine
 
     @Provides
     @Singleton
@@ -102,7 +112,7 @@ object MedBotModule {
         chatRepository: ChatRepository,
         ragRepository: RagRepository,
         preferences: UserPreferencesRepository,
-        llmEngine: LlmInferenceEngine
+        llmEngine: LocalLlmGateway
     ): SendMessageUseCase = SendMessageUseCase(
         chatRepository = chatRepository,
         ragRepository = ragRepository,
@@ -118,7 +128,7 @@ object MedBotModule {
     @Provides
     fun provideAnalyzeSkinUseCase(
         skinRepository: SkinRepository,
-        engine: SkinDiagnosisEngine
+        engine: SkinAnalysisGateway
     ): AnalyzeSkinUseCase = AnalyzeSkinUseCase(skinRepository, engine)
 
     @Provides

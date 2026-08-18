@@ -31,18 +31,36 @@ import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.core.designsystem.theme.UrgencyEmergencyRed
 import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
 import com.medbot.app.core.designsystem.theme.UrgencyMediumYellow
-import com.medbot.app.domain.agents.tools.PaediatricDosingTool
-import com.medbot.app.domain.agents.tools.ZScoreCalculatorTool
+import com.medbot.app.domain.agents.tools.ToolRegistry
+import com.medbot.app.domain.agents.tools.ToolResult
 import com.medbot.app.domain.model.*
 import com.medbot.app.domain.repository.DrugRepository
 import com.medbot.app.domain.repository.HealthToolsRepository
+import com.medbot.app.domain.tools.CalculatorInputValidation
+import com.medbot.app.domain.tools.ClinicalCalculatorInputValidator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class CalculatorUiState(
+    val kind: CalculatorKind? = null,
+    val isRunning: Boolean = false,
+    val result: String? = null,
+    val error: String? = null
+)
+
+enum class CalculatorKind {
+    PAEDIATRIC,
+    BMI,
+    DUE_DATE
+}
 
 @HiltViewModel
 class ToolsViewModel @Inject constructor(
@@ -68,6 +86,10 @@ class ToolsViewModel @Inject constructor(
     val reminders: StateFlow<List<Reminder>> = healthToolsRepository.getReminders()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _calculatorState = MutableStateFlow(CalculatorUiState())
+    val calculatorState: StateFlow<CalculatorUiState> = _calculatorState.asStateFlow()
+    private var calculatorJob: Job? = null
+
     fun selectTab(index: Int) {
         _selectedTab.value = index
     }
@@ -77,9 +99,133 @@ class ToolsViewModel @Inject constructor(
     }
 
     fun checkDrugInteraction(drugA: String, drugB: String) {
+        if (drugA.isBlank() || drugB.isBlank()) return
         viewModelScope.launch {
             val res = drugRepository.checkInteraction(listOf(drugA.trim(), drugB.trim()))
             _checkedInteractions.value = res
+        }
+    }
+
+    fun calculatePaediatric(
+        ageMonths: String,
+        weightKg: String,
+        heightCm: String,
+        gender: String,
+        drugName: String,
+        indication: String
+    ) {
+        calculatorJob?.cancel()
+        calculatorJob = viewModelScope.launch {
+            _calculatorState.value = CalculatorUiState(kind = CalculatorKind.PAEDIATRIC, isRunning = true)
+            when (val validation = ClinicalCalculatorInputValidator.paediatric(
+                ageMonths, weightKg, heightCm, gender, drugName, indication
+            )) {
+                is CalculatorInputValidation.Invalid -> {
+                    _calculatorState.value = CalculatorUiState(
+                        kind = CalculatorKind.PAEDIATRIC,
+                        error = validation.message
+                    )
+                }
+                is CalculatorInputValidation.Valid -> {
+                    val input = validation.value
+                    val results = withContext(Dispatchers.Default) {
+                        listOf(
+                            ToolRegistry.executeTool(
+                                "calculate_zscore",
+                                mapOf(
+                                    "age_months" to input.ageMonths,
+                                    "weight_kg" to input.weightKg,
+                                    "height_cm" to input.heightCm,
+                                    "gender" to input.gender
+                                )
+                            ),
+                            ToolRegistry.executeTool(
+                                "get_paediatric_dosing",
+                                mapOf(
+                                    "drug_name" to input.drugName,
+                                    "weight_kg" to input.weightKg,
+                                    "indication" to input.indication
+                                )
+                            )
+                        )
+                    }
+                    _calculatorState.value = combineToolResults(
+                        kind = CalculatorKind.PAEDIATRIC,
+                        title = "Status tumbuh kembang dan dosis",
+                        results = results
+                    )
+                }
+            }
+        }
+    }
+
+    fun calculateBmi(weightKg: String, heightCm: String) {
+        calculatorJob?.cancel()
+        calculatorJob = viewModelScope.launch {
+            _calculatorState.value = CalculatorUiState(kind = CalculatorKind.BMI, isRunning = true)
+            when (val validation = ClinicalCalculatorInputValidator.bmi(weightKg, heightCm)) {
+                is CalculatorInputValidation.Invalid -> {
+                    _calculatorState.value = CalculatorUiState(
+                        kind = CalculatorKind.BMI,
+                        error = validation.message
+                    )
+                }
+                is CalculatorInputValidation.Valid -> {
+                    val input = validation.value
+                    val result = withContext(Dispatchers.Default) {
+                        ToolRegistry.executeTool(
+                            "calculate_bmi",
+                            mapOf("weight_kg" to input.weightKg, "height_cm" to input.heightCm)
+                        )
+                    }
+                    _calculatorState.value = combineToolResults(CalculatorKind.BMI, "BMI", listOf(result))
+                }
+            }
+        }
+    }
+
+    fun calculateDueDate(day: String, month: String, year: String) {
+        calculatorJob?.cancel()
+        calculatorJob = viewModelScope.launch {
+            _calculatorState.value = CalculatorUiState(kind = CalculatorKind.DUE_DATE, isRunning = true)
+            when (val validation = ClinicalCalculatorInputValidator.dueDate(day, month, year)) {
+                is CalculatorInputValidation.Invalid -> {
+                    _calculatorState.value = CalculatorUiState(
+                        kind = CalculatorKind.DUE_DATE,
+                        error = validation.message
+                    )
+                }
+                is CalculatorInputValidation.Valid -> {
+                    val input = validation.value
+                    val result = withContext(Dispatchers.Default) {
+                        ToolRegistry.executeTool(
+                            "calculate_due_date",
+                            mapOf("day" to input.day, "month" to input.month, "year" to input.year)
+                        )
+                    }
+                    _calculatorState.value = combineToolResults(
+                        CalculatorKind.DUE_DATE,
+                        "Taksiran persalinan",
+                        listOf(result)
+                    )
+                }
+            }
+        }
+    }
+
+    private fun combineToolResults(
+        kind: CalculatorKind,
+        title: String,
+        results: List<ToolResult>
+    ): CalculatorUiState {
+        val failure = results.firstOrNull { !it.isSuccess }
+        return if (failure != null) {
+            CalculatorUiState(kind = kind, error = failure.summary)
+        } else {
+            CalculatorUiState(
+                kind = kind,
+                result = results.joinToString("\n\n") { "[$title] ${it.summary}" }
+            )
         }
     }
 
@@ -90,6 +236,7 @@ class ToolsViewModel @Inject constructor(
     }
 
     fun addReminder(title: String, hour: Int, minute: Int) {
+        if (title.isBlank() || hour !in 0..23 || minute !in 0..59) return
         viewModelScope.launch {
             healthToolsRepository.saveReminder(
                 Reminder(
@@ -170,7 +317,7 @@ fun HealthToolsScreen(
             when (selectedTab) {
                 0 -> DrugTabContent(drugs = drugs, interactions = interactions, onCheckInteraction = { a, b -> viewModel.checkDrugInteraction(a, b) })
                 1 -> LabTabContent(labTests = labTests)
-                2 -> CalculatorTabContent()
+                2 -> CalculatorTabContent(viewModel)
                 3 -> RemindersTabContent(
                     reminders = reminders,
                     onToggle = { id, en -> viewModel.toggleReminder(id, en) },
@@ -188,8 +335,8 @@ fun DrugTabContent(
     interactions: List<DrugInteraction>,
     onCheckInteraction: (String, String) -> Unit
 ) {
-    var drugA by remember { mutableStateOf("Amlodipine") }
-    var drugB by remember { mutableStateOf("Simvastatin") }
+    var drugA by remember { mutableStateOf("") }
+    var drugB by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
 
     val filteredDrugs = remember(drugs, searchQuery) {
@@ -238,6 +385,7 @@ fun DrugTabContent(
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = { onCheckInteraction(drugA, drugB) },
+                        enabled = drugA.isNotBlank() && drugB.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -303,6 +451,22 @@ fun DrugTabContent(
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             )
+        }
+
+        if (filteredDrugs.isEmpty()) {
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "UNAVAILABLE: Katalog obat lokal terverifikasi belum tersedia pada perangkat ini.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            }
         }
 
         items(filteredDrugs) { drug ->
@@ -393,7 +557,8 @@ fun LabTabContent(labTests: List<LabTest>) {
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    if (selectedTest != null) {
+                    val selected = selectedTest
+                    if (selected != null) {
                         Surface(
                             color = MaterialTheme.colorScheme.surface,
                             shape = RoundedCornerShape(14.dp),
@@ -401,12 +566,12 @@ fun LabTabContent(labTests: List<LabTest>) {
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
-                                    text = "Parameter: ${selectedTest!!.testName}",
+                                    text = "Parameter: ${selected.testName}",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Rentang Normal: ${selectedTest!!.normalLow} - ${selectedTest!!.normalHigh} ${selectedTest!!.unit}",
+                                    text = "Rentang Normal: ${selected.normalLow} - ${selected.normalHigh} ${selected.unit}",
                                     style = MaterialTheme.typography.labelSmall
                                 )
                                 Spacer(modifier = Modifier.height(10.dp))
@@ -414,15 +579,15 @@ fun LabTabContent(labTests: List<LabTest>) {
                                     OutlinedTextField(
                                         value = inputValueStr,
                                         onValueChange = { inputValueStr = it },
-                                        label = { Text("Hasil Angka (${selectedTest!!.unit})") },
+                                        label = { Text("Hasil Angka (${selected.unit})") },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(10.dp)
                                     )
                                     Button(
                                         onClick = {
                                             val value = inputValueStr.toDoubleOrNull()
-                                            if (value != null && selectedTest != null) {
-                                                val t = selectedTest!!
+                                            if (value != null) {
+                                                val t = selected
                                                 val status = when {
                                                     value < t.normalLow -> "RENDAH"
                                                     value > t.normalHigh -> "TINGGI"
@@ -443,7 +608,7 @@ fun LabTabContent(labTests: List<LabTest>) {
                                     }
                                 }
 
-                                if (evaluationResult != null) {
+                                evaluationResult?.let { result ->
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Surface(
                                         color = MaterialTheme.colorScheme.primaryContainer,
@@ -451,7 +616,7 @@ fun LabTabContent(labTests: List<LabTest>) {
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
-                                            text = evaluationResult!!,
+                                            text = result,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             modifier = Modifier.padding(12.dp)
@@ -467,6 +632,22 @@ fun LabTabContent(labTests: List<LabTest>) {
 
         item {
             Text("Pilih Parameter Laboratorium", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        }
+
+        if (labTests.isEmpty()) {
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "UNAVAILABLE: Referensi lab lokal terverifikasi belum tersedia pada perangkat ini.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            }
         }
 
         items(labTests) { test ->
@@ -513,18 +694,17 @@ fun LabTabContent(labTests: List<LabTest>) {
 }
 
 @Composable
-fun CalculatorTabContent() {
-    var ageMonths by remember { mutableStateOf("24") }
-    var weightKg by remember { mutableStateOf("12.0") }
-    var heightCm by remember { mutableStateOf("85.0") }
-    var selectedGender by remember { mutableStateOf("male") }
-    var selectedDrug by remember { mutableStateOf("paracetamol") }
-    var calcResult by remember { mutableStateOf<String?>(null) }
+fun CalculatorTabContent(viewModel: ToolsViewModel) {
+    val calculatorState by viewModel.calculatorState.collectAsStateWithLifecycle()
+    var ageMonths by remember { mutableStateOf("") }
+    var weightKg by remember { mutableStateOf("") }
+    var heightCm by remember { mutableStateOf("") }
+    var selectedGender by remember { mutableStateOf("") }
+    var selectedDrug by remember { mutableStateOf("") }
+    var indication by remember { mutableStateOf("") }
 
-    // Adult BMI inputs
-    var adultWeight by remember { mutableStateOf("65.0") }
-    var adultHeight by remember { mutableStateOf("170.0") }
-    var bmiResult by remember { mutableStateOf<String?>(null) }
+    var adultWeight by remember { mutableStateOf("") }
+    var adultHeight by remember { mutableStateOf("") }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -562,6 +742,17 @@ fun CalculatorTabContent() {
                             modifier = Modifier.springBounceClick()
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = indication,
+                        onValueChange = { indication = it },
+                        label = { Text("Indikasi atau keluhan wajib") },
+                        placeholder = { Text("Masukkan alasan penggunaan obat") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        minLines = 2
+                    )
 
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -606,41 +797,30 @@ fun CalculatorTabContent() {
                     Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = {
-                            val a = ageMonths.toIntOrNull() ?: 24
-                            val w = weightKg.toDoubleOrNull() ?: 12.0
-                            val h = heightCm.toDoubleOrNull() ?: 85.0
-
-                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).run {
-                                val zscoreTool = ZScoreCalculatorTool()
-                                val dosingTool = PaediatricDosingTool()
-                                kotlinx.coroutines.runBlocking {
-                                    val r1 = zscoreTool.execute(mapOf("age_months" to a, "weight_kg" to w, "height_cm" to h, "gender" to selectedGender))
-                                    val r2 = dosingTool.execute(mapOf("drug_name" to selectedDrug, "weight_kg" to w))
-                                    calcResult = "📊 [Status Tumbuh Kembang WHO]\n${r1.summary}\n\n💊 [Dosis Sirup Aman]\n${r2.summary}"
-                                }
-                            }
+                            viewModel.calculatePaediatric(
+                                ageMonths = ageMonths,
+                                weightKg = weightKg,
+                                heightCm = heightCm,
+                                gender = selectedGender,
+                                drugName = selectedDrug,
+                                indication = indication
+                            )
                         },
+                        enabled = !calculatorState.isRunning,
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
+                        if (calculatorState.kind == CalculatorKind.PAEDIATRIC && calculatorState.isRunning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text("Hitung Z-Score & Dosis Sirup")
                     }
-
-                    if (calcResult != null) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = calcResult!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(14.dp)
-                            )
-                        }
-                    }
+                    CalculatorResultCard(calculatorState, CalculatorKind.PAEDIATRIC)
                 }
             }
         }
@@ -679,50 +859,31 @@ fun CalculatorTabContent() {
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
-                        onClick = {
-                            val w = adultWeight.toDoubleOrNull() ?: 65.0
-                            val h = (adultHeight.toDoubleOrNull() ?: 170.0) / 100.0
-                            val bmi = w / (h * h)
-                            val category = when {
-                                bmi < 18.5 -> "Berat Badan Kurang (Underweight)"
-                                bmi < 24.9 -> "Berat Badan Normal (Ideal)"
-                                bmi < 29.9 -> "Kelebihan Berat Badan (Overweight)"
-                                else -> "Obesitas (Obese)"
-                            }
-                            val bmr = 10 * w + 6.25 * (h * 100) - 5 * 30 + 5
-                            bmiResult = "Skor BMI: ${"%.1f".format(bmi)} kg/m² ($category)\nEstimasi Kalori Dasar (BMR): ~${bmr.toInt()} kkal/hari."
-                        },
+                        onClick = { viewModel.calculateBmi(adultWeight, adultHeight) },
+                        enabled = !calculatorState.isRunning,
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Hitung BMI & Kebutuhan Kalori")
-                    }
-
-                    if (bmiResult != null) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = bmiResult!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(14.dp)
+                        if (calculatorState.kind == CalculatorKind.BMI && calculatorState.isRunning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
                         }
+                        Text("Hitung BMI")
                     }
+                    CalculatorResultCard(calculatorState, CalculatorKind.BMI)
                 }
             }
         }
 
         // Pregnancy Due Date (Naegele) Calculator
         item {
-            var hphtDay by remember { mutableStateOf("15") }
-            var hphtMonth by remember { mutableStateOf("8") }
-            var hphtYear by remember { mutableStateOf("2026") }
-            var dueDateResult by remember { mutableStateOf<String?>(null) }
+            var hphtDay by remember { mutableStateOf("") }
+            var hphtMonth by remember { mutableStateOf("") }
+            var hphtYear by remember { mutableStateOf("") }
 
             Card(
                 shape = RoundedCornerShape(20.dp),
@@ -743,64 +904,84 @@ fun CalculatorTabContent() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = hphtDay,
                             onValueChange = { hphtDay = it },
                             label = { Text("Tanggal") },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         )
                         OutlinedTextField(
                             value = hphtMonth,
                             onValueChange = { hphtMonth = it },
                             label = { Text("Bulan") },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         )
                         OutlinedTextField(
                             value = hphtYear,
                             onValueChange = { hphtYear = it },
                             label = { Text("Tahun") },
-                            modifier = Modifier.weight(1.2f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
-                        onClick = {
-                            val d = hphtDay.toIntOrNull() ?: 1
-                            val m = hphtMonth.toIntOrNull() ?: 1
-                            val y = hphtYear.toIntOrNull() ?: 2026
-                            val tool = com.medbot.app.domain.agents.tools.DueDateCalculatorTool()
-                            kotlinx.coroutines.runBlocking {
-                                val res = tool.execute(mapOf("day" to d, "month" to m, "year" to y))
-                                dueDateResult = res.summary
-                            }
-                        },
+                        onClick = { viewModel.calculateDueDate(hphtDay, hphtMonth, hphtYear) },
+                        enabled = !calculatorState.isRunning,
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
+                        if (calculatorState.kind == CalculatorKind.DUE_DATE && calculatorState.isRunning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text("Hitung Taksiran Persalinan (HPL)")
                     }
-
-                    if (dueDateResult != null) {
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = dueDateResult!!,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(14.dp)
-                            )
-                        }
-                    }
+                    CalculatorResultCard(calculatorState, CalculatorKind.DUE_DATE)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CalculatorResultCard(state: CalculatorUiState, kind: CalculatorKind) {
+    if (state.kind != kind) return
+    state.error?.let { error ->
+        Spacer(modifier = Modifier.height(14.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = "Perlu diperbaiki: $error",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.padding(14.dp)
+            )
+        }
+    }
+    state.result?.let { result ->
+        Spacer(modifier = Modifier.height(14.dp))
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = result,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(14.dp)
+            )
         }
     }
 }
@@ -813,8 +994,8 @@ fun RemindersTabContent(
     onDelete: (String) -> Unit
 ) {
     var newTitle by remember { mutableStateOf("") }
-    var hour by remember { mutableIntStateOf(8) }
-    var minute by remember { mutableIntStateOf(0) }
+    var hour by remember { mutableIntStateOf(-1) }
+    var minute by remember { mutableIntStateOf(-1) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -848,7 +1029,11 @@ fun RemindersTabContent(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Jam: %02d:%02d".format(hour, minute),
+                            text = if (hour >= 0 && minute >= 0) {
+                                "Jam: %02d:%02d".format(hour, minute)
+                            } else {
+                                "Pilih waktu"
+                            },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
@@ -866,10 +1051,10 @@ fun RemindersTabContent(
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
-                            val title = newTitle.ifBlank { "Minum Obat" }
-                            onAdd(title, hour, minute)
+                            onAdd(newTitle.trim(), hour, minute)
                             newTitle = ""
                         },
+                        enabled = newTitle.isNotBlank() && hour >= 0 && minute >= 0,
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
                         shape = RoundedCornerShape(12.dp)
                     ) {

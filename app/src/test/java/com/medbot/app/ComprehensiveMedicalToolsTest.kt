@@ -47,7 +47,8 @@ class ComprehensiveMedicalToolsTest {
         val result = tool.execute(
             mapOf(
                 "drug_name" to "paracetamol",
-                "weight_kg" to 10.0
+                "weight_kg" to 10.0,
+                "indication" to "demam"
             )
         )
         assertTrue(result.isSuccess)
@@ -61,7 +62,8 @@ class ComprehensiveMedicalToolsTest {
         val result = tool.execute(
             mapOf(
                 "drug_name" to "amoxicillin",
-                "weight_kg" to 12.0
+                "weight_kg" to 12.0,
+                "indication" to "infeksi bakteri"
             )
         )
         assertTrue(result.isSuccess)
@@ -124,7 +126,8 @@ class ComprehensiveMedicalToolsTest {
         val result = tool.execute(
             mapOf(
                 "test_name" to "hemoglobin",
-                "value" to 8.5
+                "value" to 8.5,
+                "unit" to "g/dL"
             )
         )
         assertTrue(result.isSuccess)
@@ -137,7 +140,8 @@ class ComprehensiveMedicalToolsTest {
         val result = tool.execute(
             mapOf(
                 "test_name" to "gds",
-                "value" to 250.0
+                "value" to 250.0,
+                "unit" to "mg/dL"
             )
         )
         assertTrue(result.isSuccess)
@@ -154,7 +158,11 @@ class ComprehensiveMedicalToolsTest {
                 "height_cm" to 85.0,
                 "gender" to "male"
             ),
-            "get_paediatric_dosing" to mapOf("drug_name" to "paracetamol", "weight_kg" to 12.0),
+            "get_paediatric_dosing" to mapOf(
+                "drug_name" to "paracetamol",
+                "weight_kg" to 12.0,
+                "indication" to "demam"
+            ),
             "evaluate_skin_abcd" to mapOf(
                 "asymmetry" to false,
                 "border_irregular" to false,
@@ -163,7 +171,11 @@ class ComprehensiveMedicalToolsTest {
             ),
             "calculate_bmi" to mapOf("weight_kg" to 65.0, "height_cm" to 170.0),
             "calculate_due_date" to mapOf("day" to 10, "month" to 1, "year" to 2026),
-            "interpret_lab_result" to mapOf("test_name" to "hemoglobin", "value" to 14.0)
+            "interpret_lab_result" to mapOf(
+                "test_name" to "hemoglobin",
+                "value" to 14.0,
+                "unit" to "g/dL"
+            )
         )
 
         for ((name, params) in validInputs) {

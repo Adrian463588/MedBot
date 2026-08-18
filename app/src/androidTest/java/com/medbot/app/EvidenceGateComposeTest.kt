@@ -8,8 +8,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertExists
-import androidx.compose.ui.test.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -45,10 +45,10 @@ class EvidenceGateComposeTest {
             }
         }
 
-        composeRule.onNodeWithText("Evidence gate: BLOCKED").assertExists()
-        composeRule.onNodeWithText("No real model supplied", substring = true).assertExists()
-        composeRule.onNodeWithText("No real document supplied", substring = true).assertExists()
-        composeRule.onNodeWithText("No real photo supplied", substring = true).assertExists()
+        composeRule.onNodeWithText("Evidence gate: BLOCKED").assertIsDisplayed()
+        composeRule.onNodeWithText("No real model supplied", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("No real document supplied", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("No real photo supplied", substring = true).assertIsDisplayed()
     }
 }
 
@@ -81,7 +81,7 @@ private object EvidenceGate {
             return EvidenceCheck("model", EvidenceStatus.BLOCKED, "No real model supplied")
         }
         val file = File(path)
-        val supported = path.endsWith(".litertlm", ignoreCase = true) || path.endsWith(".gguf", ignoreCase = true)
+        val supported = path.endsWith(".litertlm", ignoreCase = true)
         return if (supported && file.isFile && file.length() > 0) {
             EvidenceCheck("model", EvidenceStatus.AVAILABLE, "Readable model file supplied")
         } else {

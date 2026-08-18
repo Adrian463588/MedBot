@@ -8,7 +8,7 @@
         <precondition>ADB identifies device serial, Android API level, and OEM before execution.</precondition>
     </preconditions>
     <actions>
-        <action id="model-evidence" outcomeIfUnavailable="BLOCKED">Verify a non-empty user-supplied .litertlm or .gguf file is readable.</action>
+        <action id="model-evidence" outcomeIfUnavailable="BLOCKED">Verify a non-empty user-supplied .litertlm file is readable and can be initialized by LiteRT-LM.</action>
         <action id="document-evidence" outcomeIfUnavailable="BLOCKED">Verify a user-selected medical document URI is readable.</action>
         <action id="photo-evidence" outcomeIfUnavailable="BLOCKED">Verify a user-selected photo URI is readable.</action>
         <action id="runtime-observation" outcomeIfUnavailable="BLOCKED">Only after all prerequisites are available, observe the real app and record output without inventing model, document, or photo results.</action>

@@ -15,11 +15,13 @@
     <string name="status_ai_ready">AI Edge Siap • Offline di perangkat</string>
     <string name="status_model_not_loaded">Model AI Belum Dimuat</string>
     <string name="status_active_model">Aktif: %1$s</string>
+    <string name="status_active_model_unknown">Model aktif; nama model tidak tersedia</string>
     <string name="status_model_source">Gunakan model dari SAF atau unduh melalui Model Manager</string>
     <string name="status_rag_count">Basis pengetahuan: %1$d dokumen terindeks</string>
     <string name="urgency_format">Urgensi: %1$s</string>
     <string name="citation_title">Rujukan Klinis Resmi</string>
     <string name="citation_page">%1$s (Hal. %2$d)</string>
+    <string name="citation_non_paginated">Dokumen tidak memiliki nomor halaman</string>
     <string name="citation_section">Bagian: %1$s</string>
     <string name="streaming_typing">AI lokal sedang mengetik…</string>
 
@@ -38,4 +40,5 @@
     <string name="calculator_no_lab_tests">Data parameter laboratorium belum tersedia.</string>
     <string name="calculator_no_drugs">Data obat belum tersedia.</string>
     <string name="reminder_title_required">Masukkan judul pengingat.</string>
+    <string name="comparator_slider_description">Posisi perbandingan foto sebelum dan terbaru</string>
 </resources>

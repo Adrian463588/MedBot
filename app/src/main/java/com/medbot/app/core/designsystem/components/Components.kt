@@ -53,6 +53,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -87,9 +88,9 @@ fun Modifier.springBounceClick(scaleDown: Float = 0.94f): Modifier = Modifier.co
                     pass = PointerEventPass.Initial
                 )
                 val press = PressInteraction.Press(down.position)
-                interactionSource.emit(press)
+                interactionSource.tryEmit(press)
                 val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
-                interactionSource.emit(
+                interactionSource.tryEmit(
                     if (up == null) PressInteraction.Cancel(press) else PressInteraction.Release(press)
                 )
             }
@@ -221,8 +222,9 @@ fun StatusBannerCard(
                 .background(MedicalGradient)
                 .padding(18.dp)
         ) {
+            val isCompact = maxWidth < 500.dp
             Column {
-                if (maxWidth < 500.dp) {
+                if (isCompact) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         StatusBannerTitle(isModelLoaded, pulseAlpha)
                         Spacer(modifier = Modifier.height(8.dp))
@@ -459,11 +461,15 @@ fun CitationsDialog(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = stringResource(
-                                    R.string.citation_page,
-                                    "${index + 1}. ${citation.documentTitle}",
-                                    citation.pageNumber
-                                ),
+                                text = if (citation.pageNumber > 0) {
+                                    stringResource(
+                                        R.string.citation_page,
+                                        "${index + 1}. ${citation.documentTitle}",
+                                        citation.pageNumber
+                                    )
+                                } else {
+                                    "${index + 1}. ${citation.documentTitle} — ${stringResource(R.string.citation_non_paginated)}"
+                                },
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -611,6 +617,7 @@ fun InteractiveSkinSplitComparator(
     modifier: Modifier = Modifier
 ) {
     var splitRatio by remember { mutableFloatStateOf(0.5f) }
+    val sliderDescription = stringResource(R.string.comparator_slider_description)
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -730,7 +737,7 @@ fun InteractiveSkinSplitComparator(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .semantics {
-                        contentDescription = stringResource(R.string.comparator_slider_description)
+                        contentDescription = sliderDescription
                         stateDescription = "${(splitRatio * 100).toInt()}%"
                     },
                 colors = SliderDefaults.colors(

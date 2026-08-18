@@ -30,7 +30,13 @@ class MedicalToolsTest {
     fun `PaediatricDosing calculates paracetamol syrup volume based on weight`() = runBlocking {
         val tool = PaediatricDosingTool()
         // 12 kg child -> 120 - 180 mg PCT (5.0 - 7.5 mL of 120mg/5mL syrup)
-        val res = tool.execute(mapOf("drug_name" to "paracetamol", "weight_kg" to 12.0))
+        val res = tool.execute(
+            mapOf(
+                "drug_name" to "paracetamol",
+                "weight_kg" to 12.0,
+                "indication" to "demam"
+            )
+        )
         assertTrue(res.isSuccess)
         assertTrue(res.summary.contains("Paracetamol"))
         assertTrue(res.summary.contains("5.0") || res.summary.contains("7.5"))

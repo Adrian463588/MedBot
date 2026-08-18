@@ -47,18 +47,33 @@ import com.medbot.app.core.designsystem.theme.UrgencyMediumYellow
 import com.medbot.app.domain.model.SkinRecord
 import com.medbot.app.domain.model.UrgencyLevel
 import com.medbot.app.domain.repository.SkinRepository
+import com.medbot.app.domain.repository.SkinAnalysisException
+import com.medbot.app.domain.repository.SkinAnalysisStatus
 import com.medbot.app.domain.usecase.AnalyzeSkinUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
+
+enum class SkinAnalysisUiStatus {
+    IDLE,
+    UNAVAILABLE,
+    INSUFFICIENT_DATA,
+    FAILED
+}
+
+data class SkinAnalysisUiState(
+    val status: SkinAnalysisUiStatus = SkinAnalysisUiStatus.IDLE,
+    val message: String? = null
+)
 
 @HiltViewModel
 class SkinViewModel @Inject constructor(
@@ -78,6 +93,9 @@ class SkinViewModel @Inject constructor(
     private val _isAnalyzing = MutableStateFlow(false)
     val isAnalyzing: StateFlow<Boolean> = _isAnalyzing.asStateFlow()
 
+    private val _analysisState = MutableStateFlow(SkinAnalysisUiState())
+    val analysisState: StateFlow<SkinAnalysisUiState> = _analysisState.asStateFlow()
+
     fun selectBodyPartFilter(bodyPart: String) {
         _selectedBodyPart.value = bodyPart
     }
@@ -85,9 +103,25 @@ class SkinViewModel @Inject constructor(
     fun analyzeAndSave(imagePath: String, bodyPart: String, userNotes: String) {
         viewModelScope.launch {
             _isAnalyzing.value = true
+            _analysisState.value = SkinAnalysisUiState()
             try {
                 val record = analyzeSkinUseCase.execute(imagePath, bodyPart, userNotes)
                 _currentAnalysis.value = record
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SkinAnalysisException) {
+                _analysisState.value = SkinAnalysisUiState(
+                    status = when (e.status) {
+                        SkinAnalysisStatus.UNAVAILABLE -> SkinAnalysisUiStatus.UNAVAILABLE
+                        SkinAnalysisStatus.INSUFFICIENT_DATA -> SkinAnalysisUiStatus.INSUFFICIENT_DATA
+                    },
+                    message = e.message
+                )
+            } catch (e: Exception) {
+                _analysisState.value = SkinAnalysisUiState(
+                    status = SkinAnalysisUiStatus.FAILED,
+                    message = e.message ?: "Analisis lokal gagal dijalankan."
+                )
             } finally {
                 _isAnalyzing.value = false
             }
@@ -102,6 +136,10 @@ class SkinViewModel @Inject constructor(
 
     fun clearCurrentAnalysis() {
         _currentAnalysis.value = null
+    }
+
+    fun clearAnalysisState() {
+        _analysisState.value = SkinAnalysisUiState()
     }
 
 }
@@ -124,6 +162,7 @@ fun SkinScanScreen(
 
     val currentAnalysis by viewModel.currentAnalysis.collectAsStateWithLifecycle()
     val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
+    val analysisState by viewModel.analysisState.collectAsStateWithLifecycle()
 
     // Camera Capture Launcher
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -147,6 +186,7 @@ fun SkinScanScreen(
                 }
             }
             capturedImagePath = destFile.absolutePath
+            viewModel.clearAnalysisState()
         }
     }
 
@@ -177,6 +217,45 @@ fun SkinScanScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
         ) {
+            val analysisMessage = analysisState.message
+            if (analysisState.status != SkinAnalysisUiStatus.IDLE && analysisMessage != null) {
+                item {
+                    Surface(
+                        color = if (analysisState.status == SkinAnalysisUiStatus.UNAVAILABLE ||
+                            analysisState.status == SkinAnalysisUiStatus.INSUFFICIENT_DATA
+                        ) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.errorContainer
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = when (analysisState.status) {
+                                    SkinAnalysisUiStatus.UNAVAILABLE -> "Analisis kulit belum tersedia"
+                                    SkinAnalysisUiStatus.INSUFFICIENT_DATA -> "Data foto belum cukup"
+                                    SkinAnalysisUiStatus.FAILED -> "Analisis kulit gagal"
+                                    SkinAnalysisUiStatus.IDLE -> ""
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(text = analysisMessage, style = MaterialTheme.typography.bodySmall)
+                            if (analysisState.status == SkinAnalysisUiStatus.UNAVAILABLE) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Tidak ada diagnosis atau data klinis yang dibuat tanpa model vision lokal.",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Photo View / Capture Card
             item {
                 Card(
@@ -187,9 +266,10 @@ fun SkinScanScreen(
                     modifier = Modifier.fillMaxWidth().height(240.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        if (capturedImagePath != null && File(capturedImagePath!!).exists()) {
-                            val bitmap = remember(capturedImagePath) {
-                                BitmapFactory.decodeFile(capturedImagePath)
+                        val imagePath = capturedImagePath
+                        if (imagePath != null && File(imagePath).exists()) {
+                            val bitmap = remember(imagePath) {
+                                BitmapFactory.decodeFile(imagePath)
                             }
                             if (bitmap != null) {
                                 Image(
@@ -235,6 +315,7 @@ fun SkinScanScreen(
                                             val lineageDir = File(context.filesDir, "skin_lineage").apply { if (!exists()) mkdirs() }
                                             val photoFile = File(lineageDir, "skin_${System.currentTimeMillis()}.jpg")
                                             capturedImagePath = photoFile.absolutePath
+                                            viewModel.clearAnalysisState()
                                             try {
                                                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", photoFile)
                                                 tempCameraUri = uri
@@ -300,8 +381,8 @@ fun SkinScanScreen(
             item {
                 Button(
                     onClick = {
-                        if (capturedImagePath != null) {
-                            viewModel.analyzeAndSave(capturedImagePath!!, selectedPart, notes)
+                        capturedImagePath?.let { path ->
+                            viewModel.analyzeAndSave(path, selectedPart, notes)
                         }
                     },
                     modifier = Modifier
@@ -328,8 +409,7 @@ fun SkinScanScreen(
             }
 
             // Diagnostic Result Card
-            if (currentAnalysis != null) {
-                val record = currentAnalysis!!
+            currentAnalysis?.let { record ->
                 item {
                     SkinResultCard(record = record)
                 }
@@ -594,7 +674,7 @@ fun SkinLineageTimelineItem(record: SkinRecord, onDelete: () -> Unit) {
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(text = dateStr, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp).springBounceClick()) {
+                IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
                     Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                 }
             }

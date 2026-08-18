@@ -1,6 +1,5 @@
 package com.medbot.app.domain.usecase
 
-import com.medbot.app.data.ai.LlmInferenceEngine
 import com.medbot.app.domain.agents.AgentRegistry
 import com.medbot.app.domain.agents.QueryRewriter
 import com.medbot.app.domain.agents.TriageOrchestrator
@@ -16,7 +15,7 @@ class SendMessageUseCase(
     private val chatRepository: ChatRepository,
     private val ragRepository: RagRepository,
     private val userPrefsRepository: UserPreferencesRepository,
-    private val llmEngine: LlmInferenceEngine,
+    private val llmEngine: LocalLlmGateway,
     private val triageOrchestrator: TriageOrchestrator = TriageOrchestrator(),
     private val queryRewriter: QueryRewriter = QueryRewriter()
 ) {
@@ -63,7 +62,12 @@ class SendMessageUseCase(
             )
         }
         val ragContextText = searchResults.joinToString("\n\n") {
-            "[Dokumen: ${it.documentTitle} Hal ${it.chunk.pageNumber}]:\n${it.chunk.textContent}"
+            val location = if (it.chunk.pageNumber > 0) {
+                "Hal ${it.chunk.pageNumber}"
+            } else {
+                "Bagian tanpa nomor halaman"
+            }
+            "[Dokumen: ${it.documentTitle} $location]:\n${it.chunk.textContent}"
         }
 
         // 5. Execute relevant tools if applicable
@@ -118,7 +122,7 @@ class IngestSafDocumentsUseCase(
 
 class AnalyzeSkinUseCase(
     private val skinRepository: SkinRepository,
-    private val skinDiagnosisEngine: com.medbot.app.data.vision.SkinDiagnosisEngine
+    private val skinDiagnosisEngine: SkinAnalysisGateway
 ) {
     suspend fun execute(
         imagePath: String,

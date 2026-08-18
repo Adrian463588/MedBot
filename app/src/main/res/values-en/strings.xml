@@ -15,11 +15,13 @@
     <string name="status_ai_ready">AI edge ready • On-device offline</string>
     <string name="status_model_not_loaded">AI model not loaded</string>
     <string name="status_active_model">Active: %1$s</string>
+    <string name="status_active_model_unknown">Active model; name unavailable</string>
     <string name="status_model_source">Use a model from SAF or download it in Model Manager</string>
     <string name="status_rag_count">Knowledge base: %1$d indexed documents</string>
     <string name="urgency_format">Urgency: %1$s</string>
     <string name="citation_title">Official clinical references</string>
     <string name="citation_page">%1$s (p. %2$d)</string>
+    <string name="citation_non_paginated">Document has no page numbering</string>
     <string name="citation_section">Section: %1$s</string>
     <string name="streaming_typing">Local AI is typing…</string>
 
@@ -38,4 +40,5 @@
     <string name="calculator_no_lab_tests">Laboratory parameter data is unavailable.</string>
     <string name="calculator_no_drugs">Drug data is unavailable.</string>
     <string name="reminder_title_required">Enter a reminder title.</string>
+    <string name="comparator_slider_description">Before-and-latest photo comparison position</string>
 </resources>

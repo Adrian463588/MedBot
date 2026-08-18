@@ -1,6 +1,6 @@
 [versions]
 agp = "8.8.2"
-kotlin = "2.2.21"
+kotlin = "2.0.21"
 coreKtx = "1.15.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -10,7 +10,7 @@ activityCompose = "1.10.1"
 composeBom = "2024.12.01"
 navigationCompose = "2.8.5"
 room = "2.6.1"
-ksp = "2.2.21-2.0.5"
+ksp = "2.0.21-1.0.27"
 workManager = "2.10.0"
 okhttp = "4.12.0"
 cameraX = "1.4.1"
@@ -19,6 +19,7 @@ materialIconsExtended = "1.7.6"
 hilt = "2.54"
 litertLm = "0.16.0"
 hiltNavigationCompose = "1.2.0"
+pdfboxAndroid = "2.0.27.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -68,6 +69,7 @@ hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertLm" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

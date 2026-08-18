@@ -1,13 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- The local database contains chat, medical records, and indexed documents. -->
+    <exclude domain="database" path="medbot_local.db" />
+    <exclude domain="database" path="medbot_local.db-journal" />
+    <exclude domain="database" path="medbot_local.db-wal" />
+    <exclude domain="database" path="medbot_local.db-shm" />
+
+    <!-- App-private attachments, photos, imported medical documents, and models. -->
+    <exclude domain="file" path="chat_attachments" />
+    <exclude domain="file" path="skin_lineage" />
+    <exclude domain="file" path="rag_docs" />
+    <exclude domain="file" path="models" />
+
+    <!-- Persona, patient-profile, and persisted SAF URI preferences are sensitive. -->
+    <exclude domain="sharedpref" path="medbot_preferences.xml" />
+    <exclude domain="sharedpref" path="medbot_prefs.xml" />
 </full-backup-content>

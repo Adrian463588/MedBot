@@ -240,11 +240,15 @@ fun ChatScreen(
                             modifier = Modifier.springBounceClick(),
                             trailingIcon = {
                                 if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Hapus",
-                                        modifier = Modifier.size(14.dp).clickable { viewModel.deleteSession(s.id) }
-                                    )
+                                    IconButton(
+                                        onClick = { viewModel.deleteSession(s.id) },
+                                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Hapus sesi ${s.title}"
+                                        )
+                                    }
                                 }
                             }
                         )
@@ -354,7 +358,7 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    if (selectedImageUri != null) {
+                    selectedImageUri?.let { imagePath ->
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
                             shape = RoundedCornerShape(8.dp),
@@ -366,13 +370,14 @@ fun ChatScreen(
                             ) {
                                 Icon(Icons.Default.Image, contentDescription = "Foto", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Foto terlampir: ${File(selectedImageUri!!).name}", style = MaterialTheme.typography.labelSmall)
+                                Text("Foto terlampir: ${File(imagePath).name}", style = MaterialTheme.typography.labelSmall)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Hapus",
-                                    modifier = Modifier.size(14.dp).clickable { selectedImageUri = null }
-                                )
+                                IconButton(
+                                    onClick = { selectedImageUri = null },
+                                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Hapus foto terlampir")
+                                }
                             }
                         }
                     }
@@ -446,9 +451,9 @@ fun ChatScreen(
             }
         }
 
-        if (selectedCitationList != null && selectedCitationList!!.isNotEmpty()) {
+        selectedCitationList?.takeIf { it.isNotEmpty() }?.let { citations ->
             CitationsDialog(
-                citations = selectedCitationList!!,
+                citations = citations,
                 onDismiss = { selectedCitationList = null }
             )
         }

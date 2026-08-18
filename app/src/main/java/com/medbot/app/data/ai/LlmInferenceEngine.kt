@@ -14,6 +14,7 @@ import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.medbot.app.domain.model.DoctorAgent
 import com.medbot.app.domain.model.PersonaConfig
+import com.medbot.app.domain.repository.LocalLlmGateway
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -47,7 +48,7 @@ sealed interface ModelLoadResult {
 }
 
 /** Real LiteRT-LM wrapper. No model means no inference response. */
-class LlmInferenceEngine(context: Context) {
+class LlmInferenceEngine(context: Context) : LocalLlmGateway {
     private val appContext = context.applicationContext
     private val cacheDirectory = File(appContext.cacheDir, "litertlm-models")
 
@@ -128,7 +129,7 @@ class LlmInferenceEngine(context: Context) {
     }
 
     /** Builds the prompt consumed by the real local model. */
-    fun buildFullSystemPrompt(agent: DoctorAgent, persona: PersonaConfig, ragContext: String? = null): String {
+    override fun buildFullSystemPrompt(agent: DoctorAgent, persona: PersonaConfig, ragContext: String?): String {
         val language = if (persona.language.code == "en") {
             "LANGUAGE RULE: Respond in English."
         } else {
@@ -159,7 +160,7 @@ class LlmInferenceEngine(context: Context) {
     }
 
     /** Streams text deltas from LiteRT-LM's initialized conversation. */
-    fun streamInference(
+    override fun streamInference(
         prompt: String,
         systemPrompt: String,
         @Suppress("UNUSED_PARAMETER") agent: DoctorAgent
@@ -185,7 +186,7 @@ class LlmInferenceEngine(context: Context) {
                         if (delta.isNotEmpty()) trySend(delta)
                     }
 
-                    override fun onDone() = close()
+                    override fun onDone() { close() }
 
                     override fun onError(t: Throwable) {
                         Log.e(TAG, "LiteRT-LM generation failed", t)

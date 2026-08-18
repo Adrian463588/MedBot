@@ -4,13 +4,10 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.medbot.app.data.local.dao.*
 import com.medbot.app.data.local.entities.*
-import com.medbot.app.data.local.seed.ClinicalDataSeeder
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @Database(
     entities = [
@@ -26,7 +23,7 @@ import kotlinx.coroutines.launch
         HealthMetricEntity::class,
         ReminderEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class MedBotDatabase : RoomDatabase() {
@@ -38,6 +35,16 @@ abstract class MedBotDatabase : RoomDatabase() {
     abstract fun healthToolsDao(): HealthToolsDao
 
     companion object {
+        /**
+         * Keeps the version-1 schema and every existing row intact while making
+         * the migration path explicit for the version-2 database contract.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // No schema change in version 2; intentionally preserve all tables and rows.
+            }
+        }
+
         @Volatile
         private var INSTANCE: MedBotDatabase? = null
 
@@ -48,20 +55,7 @@ abstract class MedBotDatabase : RoomDatabase() {
                     MedBotDatabase::class.java,
                     "medbot_local.db"
                 )
-                    .addCallback(object : Callback() {
-                        override fun onCreate(db: SupportSQLiteDatabase) {
-                            super.onCreate(db)
-                            // Seed clinical drug database, lab tests, and remedies
-                            CoroutineScope(Dispatchers.IO).launch {
-                                val database = getDatabase(context)
-                                ClinicalDataSeeder.seedInitialData(
-                                    database.drugDao(),
-                                    database.healthToolsDao()
-                                )
-                            }
-                        }
-                    })
-                    .fallbackToDestructiveMigration()
+                    .addMigrations(MIGRATION_1_2)
                     .build()
                 INSTANCE = instance
                 instance

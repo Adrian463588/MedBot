@@ -267,7 +267,7 @@ fun HomeScreen(
                         title = "Skin Lineage",
                         desc = "Foto & Riwayat ABCD",
                         icon = Icons.Default.CameraAlt,
-                        color = Color(0xFFE67E22),
+                        color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToSkinScan
                     )
@@ -283,7 +283,7 @@ fun HomeScreen(
                         title = "Knowledge RAG",
                         desc = "Dokumen PDF Medis",
                         icon = Icons.AutoMirrored.Filled.MenuBook,
-                        color = Color(0xFF2563EB),
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToKnowledge
                     )
@@ -291,7 +291,7 @@ fun HomeScreen(
                         title = "Alat Klinis",
                         desc = "Obat, Lab & Tensi",
                         icon = Icons.Default.MedicalInformation,
-                        color = Color(0xFF059669),
+                        color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToTools
                     )
@@ -344,48 +344,7 @@ fun HomeScreen(
             }
         }
 
-        // Recommendation Detail Dialog
-        if (selectedRec != null) {
-            val rec = selectedRec!!
-            Dialog(onDismissRequest = { selectedRec = null }) {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                    modifier = Modifier.fillMaxWidth().padding(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(rec.emoji, fontSize = 28.sp)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(rec.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                                Text(rec.sub, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(rec.description, style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text("Langkah Praktis:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-                        Spacer(modifier = Modifier.height(6.dp))
-                        rec.steps.forEach { step ->
-                            Row(modifier = Modifier.padding(vertical = 3.dp)) {
-                                Text("✓ ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                                Text(step, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Button(
-                            onClick = { selectedRec = null },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().springBounceClick()
-                        ) {
-                            Text("Mengerti")
-                        }
-                    }
-                }
-            }
-        }
+    }
     }
 }
 

@@ -1,19 +1,32 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
--->
+<?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
-    <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <!-- The local database contains chat, medical records, and indexed documents. -->
+        <exclude domain="database" path="medbot_local.db" />
+        <exclude domain="database" path="medbot_local.db-journal" />
+        <exclude domain="database" path="medbot_local.db-wal" />
+        <exclude domain="database" path="medbot_local.db-shm" />
+
+        <!-- App-private attachments, photos, imported medical documents, and models. -->
+        <exclude domain="file" path="chat_attachments" />
+        <exclude domain="file" path="skin_lineage" />
+        <exclude domain="file" path="rag_docs" />
+        <exclude domain="file" path="models" />
+
+        <!-- Persona, patient-profile, and persisted SAF URI preferences are sensitive. -->
+        <exclude domain="sharedpref" path="medbot_preferences.xml" />
+        <exclude domain="sharedpref" path="medbot_prefs.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="database" path="medbot_local.db" />
+        <exclude domain="database" path="medbot_local.db-journal" />
+        <exclude domain="database" path="medbot_local.db-wal" />
+        <exclude domain="database" path="medbot_local.db-shm" />
+        <exclude domain="file" path="chat_attachments" />
+        <exclude domain="file" path="skin_lineage" />
+        <exclude domain="file" path="rag_docs" />
+        <exclude domain="file" path="models" />
+        <exclude domain="sharedpref" path="medbot_preferences.xml" />
+        <exclude domain="sharedpref" path="medbot_prefs.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>

@@ -1,6 +1,7 @@
 package com.medbot.app.presentation.models
 
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,13 +57,14 @@ class ModelViewModel @Inject constructor(
     val safFolderUri: StateFlow<String?> = userPreferencesRepository.safModelFolderUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val isModelLoaded: StateFlow<Boolean> = kotlinx.coroutines.flow.flow {
-        emit(modelRepository.isModelLoaded())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    private val _isModelLoaded = MutableStateFlow(modelRepository.isModelLoaded())
+    val isModelLoaded: StateFlow<Boolean> = _isModelLoaded.asStateFlow()
 
-    val activeModelName: StateFlow<String?> = kotlinx.coroutines.flow.flow {
-        emit(modelRepository.getActiveModelName())
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    private val _activeModelName = MutableStateFlow(modelRepository.getActiveModelName())
+    val activeModelName: StateFlow<String?> = _activeModelName.asStateFlow()
+
+    private val _modelMessage = MutableStateFlow<String?>(null)
+    val modelMessage: StateFlow<String?> = _modelMessage.asStateFlow()
 
     private val _selectedBackend = MutableStateFlow("AUTO")
     val selectedBackend: StateFlow<String> = _selectedBackend.asStateFlow()
@@ -90,13 +93,23 @@ class ModelViewModel @Inject constructor(
 
     fun loadModel(path: String) {
         viewModelScope.launch {
-            modelRepository.loadModelToRam(path, _selectedBackend.value)
+            val loaded = modelRepository.loadModelToRam(path, _selectedBackend.value)
+            _isModelLoaded.value = loaded
+            _activeModelName.value = modelRepository.getActiveModelName()
+            _modelMessage.value = if (loaded) {
+                "Model lokal berhasil diinisialisasi."
+            } else {
+                "MODEL_UNAVAILABLE: berkas tidak lolos validasi atau engine LiteRT-LM gagal diinisialisasi."
+            }
         }
     }
 
     fun unloadModel() {
         viewModelScope.launch {
             modelRepository.unloadModel()
+            _isModelLoaded.value = false
+            _activeModelName.value = null
+            _modelMessage.value = "Model lokal dilepas dari memori."
         }
     }
 
@@ -104,7 +117,12 @@ class ModelViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.setSafModelFolderUri(uri)
             if (uri != null) {
-                modelRepository.loadModelToRam(uri, _selectedBackend.value)
+                loadModel(uri)
+            } else {
+                modelRepository.unloadModel()
+                _isModelLoaded.value = false
+                _activeModelName.value = null
+                _modelMessage.value = null
             }
         }
     }
@@ -121,16 +139,38 @@ fun ModelManagerScreen(
     viewModel: ModelViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val safUri by viewModel.safFolderUri.collectAsStateWithLifecycle()
     val isLoaded by viewModel.isModelLoaded.collectAsStateWithLifecycle()
     val modelName by viewModel.activeModelName.collectAsStateWithLifecycle()
     val selectedBackend by viewModel.selectedBackend.collectAsStateWithLifecycle()
+    val modelMessage by viewModel.modelMessage.collectAsStateWithLifecycle()
 
-    // Native SAF OpenDocumentTree Launcher
-    val safFolderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
+    val safModelName = remember(safUri) {
+        safUri?.let { uriString ->
+            context.contentResolver.query(
+                Uri.parse(uriString),
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }
+    }
+
+    // Native SAF model-file launcher. The engine needs a real file, not a tree URI.
+    val safModelPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             viewModel.setSafFolder(uri.toString())
         }
     }
@@ -176,7 +216,11 @@ fun ModelManagerScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (safUri != null) "Folder Terpilih: $safUri" else "Gunakan model Gemma (.litertlm / .gguf) yang sudah ada di penyimpanan perangkat Anda via Android Storage Access Framework.",
+                            text = if (safUri != null) {
+                                "Berkas model terpilih: ${safModelName ?: "URI SAF tersimpan"}"
+                            } else {
+                                "Pilih berkas model .litertlm yang benar-benar tersedia di perangkat melalui Storage Access Framework."
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
@@ -184,14 +228,14 @@ fun ModelManagerScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(
                                 onClick = {
-                                    safFolderPickerLauncher.launch(null)
+                                    safModelPickerLauncher.launch(arrayOf("application/octet-stream", "application/*", "*/*"))
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.springBounceClick()
                             ) {
-                                Icon(Icons.Default.Folder, contentDescription = "Pilih Folder")
+                                Icon(Icons.Default.FolderOpen, contentDescription = "Pilih Berkas Model")
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Pilih Folder SAF")
+                                Text("Pilih Berkas Model")
                             }
                             if (safUri != null) {
                                 OutlinedButton(
@@ -203,6 +247,26 @@ fun ModelManagerScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            if (!modelMessage.isNullOrBlank()) {
+                item {
+                    Surface(
+                        color = if (isLoaded) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = modelMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(14.dp)
+                        )
                     }
                 }
             }
@@ -239,10 +303,26 @@ fun ModelManagerScreen(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Text(
-                    text = "Unduh langsung dari repositori resmi HuggingFace via WorkManager HTTP Range Resumable.",
+                    text = "Downloader hanya aktif jika manifest resmi berisi URL, ukuran, dan SHA-256 terverifikasi.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            if (viewModel.availableModels.isEmpty()) {
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "MODEL_UNAVAILABLE: belum ada manifest model resmi yang dapat diverifikasi pada build ini.",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
+                }
             }
 
             items(viewModel.availableModels) { manifest ->

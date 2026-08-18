@@ -31,7 +31,9 @@ class DocumentChunker(
                         chunkIndex = chunkIndex++,
                         textContent = chunkText,
                         pageNumber = page.pageNumber,
-                        sectionTitle = page.sectionTitle.ifBlank { "Halaman ${page.pageNumber}" },
+                        sectionTitle = page.sectionTitle.ifBlank {
+                            if (page.pageNumber > 0) "Halaman ${page.pageNumber}" else "Bagian tanpa nomor halaman"
+                        },
                         embedding = vector
                     )
                 )
