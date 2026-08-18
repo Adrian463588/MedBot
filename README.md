@@ -2,6 +2,8 @@
 
 > **100% Offline & Private On-Device AI Health Companion powered by Gemma LLM, Storage Access Framework (SAF), Deterministic Clinical Tools, and RAG Knowledge Retrieval.**
 
+![MedBot Live On-Device Preview](./medbot_live_preview.png)
+
 ---
 
 ## 🌟 Ringkasan Fitur Utama (Core Features)

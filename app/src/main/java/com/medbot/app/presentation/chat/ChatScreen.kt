@@ -1,5 +1,8 @@
 package com.medbot.app.presentation.chat
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +14,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -19,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +44,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 
 class ChatViewModel(
     private val chatRepository: ChatRepository,
@@ -138,6 +147,7 @@ fun ChatScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPersona: () -> Unit
 ) {
+    val context = LocalContext.current
     val currentSessionId by viewModel.currentSessionId.collectAsState()
     val sessions by viewModel.sessions.collectAsState()
     val messages by viewModel.messages.collectAsState()
@@ -148,6 +158,21 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<String?>(null) }
     var selectedCitationList by remember { mutableStateOf<List<Citation>?>(null) }
+
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val lineageDir = File(context.filesDir, "chat_attachments").apply { if (!exists()) mkdirs() }
+            val destFile = File(lineageDir, "attach_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            selectedImageUri = destFile.absolutePath
+        }
+    }
 
     LaunchedEffect(initialSessionId) {
         if (initialSessionId != null) {
@@ -176,15 +201,15 @@ fun ChatScreen(
                 title = activeAgent.displayNameId,
                 subtitle = "${activeAgent.specialtyId} • ${persona.tone.label}",
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.startNewSession() }) {
+                    IconButton(onClick = { viewModel.startNewSession() }, modifier = Modifier.springBounceClick()) {
                         Icon(Icons.Default.AddComment, contentDescription = "Sesi Baru", tint = MaterialTheme.colorScheme.primary)
                     }
-                    IconButton(onClick = onNavigateToPersona) {
+                    IconButton(onClick = onNavigateToPersona, modifier = Modifier.springBounceClick()) {
                         Icon(Icons.Default.Tune, contentDescription = "Persona", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
@@ -209,6 +234,7 @@ fun ChatScreen(
                             selected = isSelected,
                             onClick = { viewModel.selectSession(s.id) },
                             label = { Text(s.title.take(20), style = MaterialTheme.typography.labelSmall) },
+                            modifier = Modifier.springBounceClick(),
                             trailingIcon = {
                                 if (isSelected) {
                                     Icon(
@@ -243,10 +269,10 @@ fun ChatScreen(
                                 Surface(
                                     color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = CircleShape,
-                                    modifier = Modifier.size(64.dp)
+                                    modifier = Modifier.size(68.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text("🩺", fontSize = 32.sp)
+                                        Text("🩺", fontSize = 34.sp)
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
@@ -309,7 +335,7 @@ fun ChatScreen(
                             ) {
                                 Icon(Icons.Default.Image, contentDescription = "Foto", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Citra terlampir", style = MaterialTheme.typography.labelSmall)
+                                Text("Citra terlampir: ${File(selectedImageUri!!).name}", style = MaterialTheme.typography.labelSmall)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
                                     Icons.Default.Close,
@@ -324,9 +350,10 @@ fun ChatScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        IconButton(onClick = {
-                            selectedImageUri = "skin_sample_camera.jpg"
-                        }) {
+                        IconButton(
+                            onClick = { pickImageLauncher.launch("image/*") },
+                            modifier = Modifier.springBounceClick()
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.AddPhotoAlternate,
                                 contentDescription = "Lampirkan Citra",
@@ -359,16 +386,17 @@ fun ChatScreen(
                                     )
                                 }
                             },
-                            enabled = (inputText.isNotBlank() || selectedImageUri != null) && !isGenerating
+                            enabled = (inputText.isNotBlank() || selectedImageUri != null) && !isGenerating,
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Surface(
                                 color = if ((inputText.isNotBlank() || selectedImageUri != null) && !isGenerating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                                 shape = CircleShape,
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(42.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.Send,
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
                                         contentDescription = "Kirim",
                                         tint = if ((inputText.isNotBlank() || selectedImageUri != null) && !isGenerating) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.size(20.dp)
@@ -455,14 +483,14 @@ fun ChatBubbleItem(
 
                 if (message.citations.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Divider(color = textColor.copy(alpha = 0.2f))
+                    HorizontalDivider(color = textColor.copy(alpha = 0.2f))
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { onCitationClick() }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MenuBook,
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
                             contentDescription = "Sitasi",
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.primary

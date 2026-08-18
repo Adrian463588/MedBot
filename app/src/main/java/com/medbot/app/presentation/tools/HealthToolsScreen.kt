@@ -5,10 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,9 +25,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
+import com.medbot.app.core.designsystem.components.springBounceClick
+import com.medbot.app.core.designsystem.theme.UrgencyEmergencyRed
 import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
 import com.medbot.app.core.designsystem.theme.UrgencyMediumYellow
-import com.medbot.app.domain.agents.tools.ToolRegistry
+import com.medbot.app.domain.agents.tools.PaediatricDosingTool
+import com.medbot.app.domain.agents.tools.ZScoreCalculatorTool
 import com.medbot.app.domain.model.*
 import com.medbot.app.domain.repository.DrugRepository
 import com.medbot.app.domain.repository.HealthToolsRepository
@@ -44,9 +49,8 @@ class ToolsViewModel(
     private val _selectedTab = MutableStateFlow(0)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
 
-    // Drug Search & Interactions
-    private val _drugQuery = MutableStateFlow("")
-    val drugQuery: StateFlow<String> = _drugQuery.asStateFlow()
+    private val _drugSearchQuery = MutableStateFlow("")
+    val drugSearchQuery: StateFlow<String> = _drugSearchQuery.asStateFlow()
 
     val searchResults: StateFlow<List<Drug>> = drugRepository.searchDrugs("")
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -64,9 +68,13 @@ class ToolsViewModel(
         _selectedTab.value = index
     }
 
+    fun setDrugQuery(query: String) {
+        _drugSearchQuery.value = query
+    }
+
     fun checkDrugInteraction(drugA: String, drugB: String) {
         viewModelScope.launch {
-            val res = drugRepository.checkInteraction(listOf(drugA, drugB))
+            val res = drugRepository.checkInteraction(listOf(drugA.trim(), drugB.trim()))
             _checkedInteractions.value = res
         }
     }
@@ -88,6 +96,12 @@ class ToolsViewModel(
                     daysOfWeek = listOf(1, 2, 3, 4, 5, 6, 7)
                 )
             )
+        }
+    }
+
+    fun deleteReminder(id: String) {
+        viewModelScope.launch {
+            healthToolsRepository.deleteReminder(id)
         }
     }
 
@@ -113,7 +127,7 @@ fun HealthToolsScreen(
     val reminders by viewModel.reminders.collectAsState()
     val interactions by viewModel.checkedInteractions.collectAsState()
 
-    val tabs = listOf("Obat & Interaksi", "Nilai Lab", "Kalkulator Anak", "Pengingat")
+    val tabs = listOf("Obat & Interaksi", "Evaluasi Lab", "Kalkulator Klinis", "Pengingat")
 
     Scaffold(
         topBar = {
@@ -121,8 +135,8 @@ fun HealthToolsScreen(
                 title = "Perkakas Medis Lokal",
                 subtitle = "Formularium Obat, Rentang Lab & Kalkulator",
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 }
             )
@@ -142,7 +156,7 @@ fun HealthToolsScreen(
                     Tab(
                         selected = selectedTab == index,
                         onClick = { viewModel.selectTab(index) },
-                        text = { Text(title, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+                        text = { Text(title, style = MaterialTheme.typography.labelSmall, maxLines = 1, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
             }
@@ -151,7 +165,12 @@ fun HealthToolsScreen(
                 0 -> DrugTabContent(drugs = drugs, interactions = interactions, onCheckInteraction = { a, b -> viewModel.checkDrugInteraction(a, b) })
                 1 -> LabTabContent(labTests = labTests)
                 2 -> CalculatorTabContent()
-                3 -> RemindersTabContent(reminders = reminders, onToggle = { id, en -> viewModel.toggleReminder(id, en) }, onAdd = { t, h, m -> viewModel.addSampleReminder(t, h, m) })
+                3 -> RemindersTabContent(
+                    reminders = reminders,
+                    onToggle = { id, en -> viewModel.toggleReminder(id, en) },
+                    onAdd = { t, h, m -> viewModel.addSampleReminder(t, h, m) },
+                    onDelete = { id -> viewModel.deleteReminder(id) }
+                )
             }
         }
     }
@@ -165,6 +184,15 @@ fun DrugTabContent(
 ) {
     var drugA by remember { mutableStateOf("Amlodipine") }
     var drugB by remember { mutableStateOf("Simvastatin") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredDrugs = remember(drugs, searchQuery) {
+        if (searchQuery.isBlank()) drugs else drugs.filter {
+            it.name.contains(searchQuery, ignoreCase = true) ||
+            it.genericName.contains(searchQuery, ignoreCase = true) ||
+            it.indication.contains(searchQuery, ignoreCase = true)
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -173,13 +201,13 @@ fun DrugTabContent(
         // Interaction Checker Card
         item {
             Card(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "⚡ Cek Interaksi Obat Lokal",
+                        text = "⚡ Cek Interaksi Antar-Obat Lokal",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -188,45 +216,67 @@ fun DrugTabContent(
                         OutlinedTextField(
                             value = drugA,
                             onValueChange = { drugA = it },
-                            label = { Text("Obat 1") },
+                            label = { Text("Nama Obat 1") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
                         OutlinedTextField(
                             value = drugB,
                             onValueChange = { drugB = it },
-                            label = { Text("Obat 2") },
+                            label = { Text("Nama Obat 2") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                     Button(
                         onClick = { onCheckInteraction(drugA, drugB) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.fillMaxWidth().springBounceClick(),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Periksa Interaksi")
+                        Icon(Icons.Default.CompareArrows, contentDescription = "Cek")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Periksa Interaksi Obat")
                     }
 
                     if (interactions.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         interactions.forEach { inter ->
                             Surface(
                                 color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                             ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text(
-                                        text = "[Tingkat: ${inter.severity.label}] ${inter.drugA} + ${inter.drugB}",
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(inter.description, style = MaterialTheme.typography.bodySmall)
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = "${inter.drugA} + ${inter.drugB}",
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
+                                            shape = RoundedCornerShape(4.dp)
+                                        ) {
+                                            Text(
+                                                text = inter.severity.label,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text("Rekomendasi: ${inter.recommendation}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    Text(inter.description, style = MaterialTheme.typography.bodySmall)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "💡 Saran Klinis: ${inter.recommendation}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
@@ -236,12 +286,21 @@ fun DrugTabContent(
         }
 
         item {
-            Text("Formularium Obat Esensial", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Text("Formularium Obat & Alternatif Generik", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Spacer(modifier = Modifier.height(6.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Cari obat (misal: paracetamol, amlodipine, maag)...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Cari") },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
         }
 
-        items(drugs) { drug ->
+        items(filteredDrugs) { drug ->
             Card(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -273,9 +332,12 @@ fun DrugTabContent(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(text = "Indikasi: ${drug.indication}", style = MaterialTheme.typography.bodySmall)
                     Text(text = "Dosis Dewasa: ${drug.adultDose}", style = MaterialTheme.typography.bodySmall)
+                    if (drug.childDose.isNotBlank()) {
+                        Text(text = "Dosis Anak: ${drug.childDose}", style = MaterialTheme.typography.bodySmall)
+                    }
                     if (drug.affordableAlternatives.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "Nama Dagang Terjangkau: ${drug.affordableAlternatives.joinToString(", ")}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = "Pilihan Generik Terjangkau: ${drug.affordableAlternatives.joinToString(", ")}", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -285,16 +347,127 @@ fun DrugTabContent(
 
 @Composable
 fun LabTabContent(labTests: List<LabTest>) {
+    var selectedTest by remember { mutableStateOf<LabTest?>(null) }
+    var inputValueStr by remember { mutableStateOf("") }
+    var evaluationResult by remember { mutableStateOf<String?>(null) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // Interactive Value Checker Card
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🧪 Kalkulator Interpretasi Nilai Lab",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Pilih parameter lab di bawah, masukkan angka hasil tes Anda untuk evaluasi instan.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (selectedTest != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Parameter: ${selectedTest!!.testName}",
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Rentang Normal: ${selectedTest!!.normalLow} - ${selectedTest!!.normalHigh} ${selectedTest!!.unit}",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = inputValueStr,
+                                        onValueChange = { inputValueStr = it },
+                                        label = { Text("Hasil Angka Anda (${selectedTest!!.unit})") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    Button(
+                                        onClick = {
+                                            val value = inputValueStr.toDoubleOrNull()
+                                            if (value != null && selectedTest != null) {
+                                                val t = selectedTest!!
+                                                val status = when {
+                                                    value < t.normalLow -> "RENDAH"
+                                                    value > t.normalHigh -> "TINGGI"
+                                                    else -> "NORMAL"
+                                                }
+                                                val explanation = when (status) {
+                                                    "RENDAH" -> t.interpretationLow
+                                                    "TINGGI" -> t.interpretationHigh
+                                                    else -> "Nilai berada dalam batas normal sehat."
+                                                }
+                                                evaluationResult = "[STATUS: $status] Nilai ${value} ${t.unit} (Normal: ${t.normalLow} - ${t.normalHigh} ${t.unit}).\n\n$explanation"
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.align(Alignment.CenterVertically).springBounceClick()
+                                    ) {
+                                        Text("Evaluasi")
+                                    }
+                                }
+
+                                if (evaluationResult != null) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = evaluationResult!!,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text("Pilih Parameter Laboratorium Standar", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+        }
+
         items(labTests) { test ->
+            val isSelected = selectedTest?.testName == test.testName
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .springBounceClick()
+                    .clickable {
+                        selectedTest = test
+                        inputValueStr = ""
+                        evaluationResult = null
+                    }
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(
@@ -308,16 +481,13 @@ fun LabTabContent(labTests: List<LabTest>) {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Nilai Normal: ${test.normalLow} - ${test.normalHigh} ${test.unit}",
+                            text = "${test.normalLow} - ${test.normalHigh} ${test.unit}",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                         )
                     }
                     Text(text = "Kategori: ${test.category}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(text = "• Jika Rendah: ${test.interpretationLow}", style = MaterialTheme.typography.bodySmall)
-                    Text(text = "• Jika Tinggi: ${test.interpretationHigh}", style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(text = "Makna Klinis: ${test.clinicalSignificance}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = "Makna Klinis: ${test.clinicalSignificance}", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -329,15 +499,23 @@ fun CalculatorTabContent() {
     var ageMonths by remember { mutableStateOf("24") }
     var weightKg by remember { mutableStateOf("12.0") }
     var heightCm by remember { mutableStateOf("85.0") }
+    var selectedGender by remember { mutableStateOf("male") }
+    var selectedDrug by remember { mutableStateOf("paracetamol") }
     var calcResult by remember { mutableStateOf<String?>(null) }
+
+    // Adult BMI inputs
+    var adultWeight by remember { mutableStateOf("65.0") }
+    var adultHeight by remember { mutableStateOf("170.0") }
+    var bmiResult by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // WHO Pediatric Z-Score Calculator
         item {
             Card(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -349,12 +527,29 @@ fun CalculatorTabContent() {
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = selectedGender == "male",
+                            onClick = { selectedGender = "male" },
+                            label = { Text("Laki-Laki (Boy)") },
+                            modifier = Modifier.springBounceClick()
+                        )
+                        FilterChip(
+                            selected = selectedGender == "female",
+                            onClick = { selectedGender = "female" },
+                            label = { Text("Perempuan (Girl)") },
+                            modifier = Modifier.springBounceClick()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = ageMonths,
                         onValueChange = { ageMonths = it },
                         label = { Text("Usia Anak (Bulan)") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(10.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -363,48 +558,134 @@ fun CalculatorTabContent() {
                             onValueChange = { weightKg = it },
                             label = { Text("Berat Badan (kg)") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
                         OutlinedTextField(
                             value = heightCm,
                             onValueChange = { heightCm = it },
-                            label = { Text("Tinggi/Panjang (cm)") },
+                            label = { Text("Tinggi Badan (cm)") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Pilihan Obat Sirup Anak:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(listOf("paracetamol", "amoxicillin", "ibuprofen", "cetirizine")) { drug ->
+                            FilterChip(
+                                selected = selectedDrug == drug,
+                                onClick = { selectedDrug = drug },
+                                label = { Text(drug.replaceFirstChar { it.uppercase() }) },
+                                modifier = Modifier.springBounceClick()
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
                             val a = ageMonths.toIntOrNull() ?: 24
                             val w = weightKg.toDoubleOrNull() ?: 12.0
                             val h = heightCm.toDoubleOrNull() ?: 85.0
-                            
+
                             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).run {
-                                val zscoreRes = com.medbot.app.domain.agents.tools.ZScoreCalculatorTool()
-                                val dosingRes = com.medbot.app.domain.agents.tools.PaediatricDosingTool()
+                                val zscoreTool = ZScoreCalculatorTool()
+                                val dosingTool = PaediatricDosingTool()
                                 kotlinx.coroutines.runBlocking {
-                                    val r1 = zscoreRes.execute(mapOf("age_months" to a, "weight_kg" to w, "height_cm" to h))
-                                    val r2 = dosingRes.execute(mapOf("drug_name" to "paracetamol", "weight_kg" to w))
-                                    calcResult = "${r1.summary}\n\n${r2.summary}"
+                                    val r1 = zscoreTool.execute(mapOf("age_months" to a, "weight_kg" to w, "height_cm" to h, "gender" to selectedGender))
+                                    val r2 = dosingTool.execute(mapOf("drug_name" to selectedDrug, "weight_kg" to w))
+                                    calcResult = "📊 [Status Tumbuh Kembang WHO]\n${r1.summary}\n\n💊 [Dosis Sirup Aman]\n${r2.summary}"
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.fillMaxWidth().springBounceClick(),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Hitung Status Gizi & Dosis Sirup")
+                        Text("Hitung Z-Score & Dosis Sirup")
                     }
 
                     if (calcResult != null) {
                         Spacer(modifier = Modifier.height(12.dp))
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = calcResult!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Adult BMI & Body Metrics Calculator
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🏃 Indeks Massa Tubuh (BMI) & Kalori Dewasa",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = adultWeight,
+                            onValueChange = { adultWeight = it },
+                            label = { Text("Berat (kg)") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        OutlinedTextField(
+                            value = adultHeight,
+                            onValueChange = { adultHeight = it },
+                            label = { Text("Tinggi (cm)") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            val w = adultWeight.toDoubleOrNull() ?: 65.0
+                            val h = (adultHeight.toDoubleOrNull() ?: 170.0) / 100.0
+                            val bmi = w / (h * h)
+                            val category = when {
+                                bmi < 18.5 -> "Berat Badan Kurang (Underweight)"
+                                bmi < 24.9 -> "Berat Badan Normal (Ideal)"
+                                bmi < 29.9 -> "Kelebihan Berat Badan (Overweight)"
+                                else -> "Obesitas (Obese)"
+                            }
+                            val bmr = 10 * w + 6.25 * (h * 100) - 5 * 30 + 5
+                            bmiResult = "Skor BMI: ${"%.1f".format(bmi)} kg/m² ($category)\nEstimasi Kalori Dasar (BMR): ~${bmr.toInt()} kkal/hari."
+                        },
+                        modifier = Modifier.fillMaxWidth().springBounceClick(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Hitung BMI & Kebutuhan Kalori")
+                    }
+
+                    if (bmiResult != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = bmiResult!!,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(12.dp)
@@ -421,40 +702,71 @@ fun CalculatorTabContent() {
 fun RemindersTabContent(
     reminders: List<Reminder>,
     onToggle: (String, Boolean) -> Unit,
-    onAdd: (String, Int, Int) -> Unit
+    onAdd: (String, Int, Int) -> Unit,
+    onDelete: (String) -> Unit
 ) {
+    var newTitle by remember { mutableStateOf("") }
+    var hour by remember { mutableStateOf(8) }
+    var minute by remember { mutableStateOf(0) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Jadwal Minum Obat & Pengingat", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Button(
-                    onClick = { onAdd("Paracetamol 500mg (Sesudah Makan)", 8, 0) },
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Tambah", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Tambah")
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "⏰ Tambah Pengingat Minum Obat / Cek Tensi",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newTitle,
+                        onValueChange = { newTitle = it },
+                        placeholder = { Text("Contoh: Amlodipine 5mg (Pagi hari)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                val title = newTitle.ifBlank { "Minum Obat" }
+                                onAdd(title, hour, minute)
+                                newTitle = ""
+                            },
+                            modifier = Modifier.weight(1f).springBounceClick(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.AlarmAdd, contentDescription = "Tambah")
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Simpan Pengingat")
+                        }
+                    }
                 }
             }
+        }
+
+        item {
+            Text("Jadwal Pengingat Aktif", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         }
 
         if (reminders.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text("Belum ada jadwal pengingat.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Belum ada jadwal pengingat. Gunakan form di atas untuk menambahkan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
             items(reminders) { rem ->
                 Card(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -464,7 +776,7 @@ fun RemindersTabContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.padding(14.dp).fillMaxWidth()
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = rem.title,
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
@@ -475,10 +787,15 @@ fun RemindersTabContent(
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                        Switch(
-                            checked = rem.isEnabled,
-                            onCheckedChange = { onToggle(rem.id, it) }
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = rem.isEnabled,
+                                onCheckedChange = { onToggle(rem.id, it) }
+                            )
+                            IconButton(onClick = { onDelete(rem.id) }, modifier = Modifier.springBounceClick()) {
+                                Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
                     }
                 }
             }

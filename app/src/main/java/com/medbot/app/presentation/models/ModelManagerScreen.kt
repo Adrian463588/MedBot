@@ -1,5 +1,8 @@
 package com.medbot.app.presentation.models
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +27,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
+import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
 import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.domain.model.DownloadProgress
@@ -127,14 +132,23 @@ fun ModelManagerScreen(
     val modelName by viewModel.activeModelName.collectAsState()
     val selectedBackend by viewModel.selectedBackend.collectAsState()
 
+    // Native SAF OpenDocumentTree Launcher
+    val safFolderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.setSafFolder(uri.toString())
+        }
+    }
+
     Scaffold(
         topBar = {
             MedBotTopAppBar(
                 title = "Model Manager & Edge AI",
                 subtitle = "Pemuatan Dual-Mode: SAF & In-App Downloader",
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 }
             )
@@ -166,7 +180,7 @@ fun ModelManagerScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (safUri != null) "Folder Terpilih: $safUri" else "Gunakan model Gemma (.litertlm / .gguf) yang sudah ada di penyimpanan perangkat Anda.",
+                            text = if (safUri != null) "Folder Terpilih: $safUri" else "Gunakan model Gemma (.litertlm / .gguf) yang sudah ada di penyimpanan perangkat Anda via Android Storage Access Framework.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
@@ -174,9 +188,10 @@ fun ModelManagerScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
                                 onClick = {
-                                    viewModel.setSafFolder("/sdcard/Download/Gemma4Models")
+                                    safFolderPickerLauncher.launch(null)
                                 },
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.springBounceClick()
                             ) {
                                 Icon(Icons.Default.Folder, contentDescription = "Pilih Folder")
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -185,7 +200,8 @@ fun ModelManagerScreen(
                             if (safUri != null) {
                                 OutlinedButton(
                                     onClick = { viewModel.setSafFolder(null) },
-                                    shape = RoundedCornerShape(8.dp)
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.springBounceClick()
                                 ) {
                                     Text("Reset")
                                 }
@@ -198,7 +214,7 @@ fun ModelManagerScreen(
             // Backend Hardware Accelerator Selector
             item {
                 Card(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -210,7 +226,8 @@ fun ModelManagerScreen(
                                 FilterChip(
                                     selected = selectedBackend == backend,
                                     onClick = { viewModel.selectBackend(backend) },
-                                    label = { Text(backend) }
+                                    label = { Text(backend) },
+                                    modifier = Modifier.springBounceClick()
                                 )
                             }
                         }
@@ -225,7 +242,7 @@ fun ModelManagerScreen(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Text(
-                    text = "Unduh langsung dari repositori resmi HuggingFace via HTTP Range Resumable.",
+                    text = "Unduh langsung dari repositori resmi HuggingFace via WorkManager HTTP Range Resumable.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -256,7 +273,7 @@ fun ModelDownloadItemCard(
     }
 
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
@@ -324,7 +341,7 @@ fun ModelDownloadItemCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Buttons
+            // Action Buttons with microinteraction bounce
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -333,7 +350,8 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.NOT_DOWNLOADED -> {
                         Button(
                             onClick = { viewModel.startDownload(manifest.id) },
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Default.Download, contentDescription = "Unduh")
                             Spacer(modifier = Modifier.width(6.dp))
@@ -343,7 +361,8 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.DOWNLOADING -> {
                         Button(
                             onClick = { viewModel.pauseDownload(manifest.id) },
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Default.Pause, contentDescription = "Jeda")
                             Spacer(modifier = Modifier.width(6.dp))
@@ -351,7 +370,8 @@ fun ModelDownloadItemCard(
                         }
                         OutlinedButton(
                             onClick = { viewModel.cancelDownload(manifest.id) },
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Text("Batal")
                         }
@@ -359,7 +379,8 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.PAUSED -> {
                         Button(
                             onClick = { viewModel.startDownload(manifest.id) },
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = "Lanjutkan")
                             Spacer(modifier = Modifier.width(6.dp))
@@ -370,7 +391,8 @@ fun ModelDownloadItemCard(
                         if (!isLoaded) {
                             Button(
                                 onClick = { viewModel.loadModel("/data/data/com.medbot.app/files/models/${manifest.id}.litertlm") },
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.springBounceClick()
                             ) {
                                 Icon(Icons.Default.Memory, contentDescription = "Muat ke RAM")
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -379,7 +401,8 @@ fun ModelDownloadItemCard(
                         } else {
                             OutlinedButton(
                                 onClick = { viewModel.unloadModel() },
-                                shape = RoundedCornerShape(8.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.springBounceClick()
                             ) {
                                 Text("Lepas dari RAM (Unload)")
                             }
@@ -388,8 +411,9 @@ fun ModelDownloadItemCard(
                     ModelDownloadStatus.ERROR -> {
                         Button(
                             onClick = { viewModel.startDownload(manifest.id) },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Text("Coba Unduh Ulang")
                         }

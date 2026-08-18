@@ -1,5 +1,6 @@
 package com.medbot.app.presentation.home
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,6 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -27,6 +30,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.StatusBannerCard
+import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.agents.AgentRegistry
 import com.medbot.app.domain.model.DoctorAgent
 import com.medbot.app.domain.model.PersonaConfig
@@ -62,11 +66,12 @@ class HomeViewModel(
     val personaConfig: StateFlow<PersonaConfig> = userPreferencesRepository.personaConfig
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PersonaConfig())
 
-    fun createNewChat(onCreated: (String) -> Unit) {
+    fun createNewChat(agentId: String? = null, onCreated: (String) -> Unit) {
         viewModelScope.launch {
+            val targetAgent = agentId ?: personaConfig.value.selectedAgentId
             val session = chatRepository.createSession(
                 title = "Konsultasi Medis Baru",
-                agentId = personaConfig.value.selectedAgentId
+                agentId = targetAgent
             )
             onCreated(session.id)
         }
@@ -84,6 +89,17 @@ class HomeViewModel(
         }
     }
 }
+
+val CLINICAL_CLUSTERS = listOf(
+    "Semua (46)",
+    "Pelayanan Primer & IGD",
+    "Penyakit Dalam & Organ",
+    "Anak & Tahapan Usia",
+    "Kulit, Bedah & Indera",
+    "Kandungan & Reproduksi",
+    "Diagnostik & Farmasi",
+    "Saraf & Rehabilitasi"
+)
 
 @Composable
 fun HomeScreen(
@@ -105,6 +121,20 @@ fun HomeScreen(
     }
 
     var quickQuery by remember { mutableStateOf("") }
+    var selectedCluster by remember { mutableStateOf("Semua (46)") }
+
+    val filteredSpecialists = remember(selectedCluster) {
+        when (selectedCluster) {
+            "Pelayanan Primer & IGD" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("orchestrator", "general_practice", "emergency_medicine", "preventive_medicine", "lifestyle_medicine") }
+            "Penyakit Dalam & Organ" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("internal_medicine", "cardiology", "pulmonology", "gastroenterology", "nephrology", "endocrinology", "infectious_disease", "haematology", "rheumatology", "allergy_immunology") }
+            "Anak & Tahapan Usia" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("paediatrics", "neonatology", "adolescent_medicine", "geriatrics") }
+            "Kulit, Bedah & Indera" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("dermatology", "orthopaedics", "ophthalmology", "otorhinolaryngology", "dentistry", "urology") }
+            "Kandungan & Reproduksi" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("obstetrics_gynecology", "fertility") }
+            "Diagnostik & Farmasi" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("pharmacy", "radiology", "clinical_pathology", "toxicology") }
+            "Saraf & Rehabilitasi" -> AgentRegistry.ALL_AGENTS.filter { it.id in listOf("neurology", "psychiatry", "sleep_medicine", "pain_management", "sports_medicine", "rehabilitation", "palliative_care", "genetics", "travel_medicine", "vascular_medicine", "transplant_medicine", "integrative_medicine", "addiction_medicine", "occupational_medicine", "nutrition_dietetics") }
+            else -> AgentRegistry.ALL_AGENTS
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -112,7 +142,7 @@ fun HomeScreen(
                 title = "MedBot On-Device",
                 subtitle = "Asisten Medis Lokal & Offline RAG",
                 actions = {
-                    IconButton(onClick = onNavigateToPersona) {
+                    IconButton(onClick = onNavigateToPersona, modifier = Modifier.springBounceClick()) {
                         Icon(
                             imageVector = Icons.Default.Tune,
                             contentDescription = "Atur Persona",
@@ -144,8 +174,11 @@ fun HomeScreen(
             item {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().clickable { onNavigateToPersona() }
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .springBounceClick()
+                        .clickable { onNavigateToPersona() }
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -156,10 +189,10 @@ fun HomeScreen(
                             Surface(
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = CircleShape,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text("🩺", fontSize = 18.sp)
+                                    Text("🩺", fontSize = 20.sp)
                                 }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
@@ -169,7 +202,7 @@ fun HomeScreen(
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
                                 Text(
-                                    text = "${persona.tone.label} • ${persona.depth.label}",
+                                    text = "${persona.tone.label} • ${persona.depth.label} (${persona.language.displayName})",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -184,7 +217,7 @@ fun HomeScreen(
                 }
             }
 
-            // Quick Symptom Triage Input
+            // Quick Symptom Triage Input with microinteractions
             item {
                 Text(
                     text = "Triase Gejala Cepat",
@@ -204,16 +237,17 @@ fun HomeScreen(
                                     }
                                 }
                             },
-                            enabled = quickQuery.isNotBlank()
+                            enabled = quickQuery.isNotBlank(),
+                            modifier = Modifier.springBounceClick()
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Send,
+                                imageVector = Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Kirim",
                                 tint = if (quickQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                             )
                         }
                     },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -261,7 +295,7 @@ fun HomeScreen(
                     FeatureCard(
                         title = "Knowledge RAG",
                         desc = "Dokumen PDF Medis",
-                        icon = Icons.Default.MenuBook,
+                        icon = Icons.AutoMirrored.Filled.MenuBook,
                         color = Color(0xFF2980B9),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToKnowledge
@@ -277,19 +311,41 @@ fun HomeScreen(
                 }
             }
 
-            // Available Specialist Carousel
+            // 46 Specialist Medical Doctors Cluster Selection
             item {
                 Text(
-                    text = "46 Agen Spesialis Medis Tersedia",
+                    text = "46 Agen Spesialis Medis Terpadu",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(CLINICAL_CLUSTERS) { cluster ->
+                        FilterChip(
+                            selected = selectedCluster == cluster,
+                            onClick = { selectedCluster = cluster },
+                            label = { Text(cluster, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 16.dp)
                 ) {
-                    items(AgentRegistry.ALL_AGENTS) { agent ->
-                        SpecialistCard(agent = agent, onClick = onNavigateToPersona)
+                    items(filteredSpecialists) { agent ->
+                        SpecialistCard(
+                            agent = agent,
+                            onClick = {
+                                viewModel.createNewChat(agent.id) { sessionId ->
+                                    onNavigateToChat(sessionId)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -307,26 +363,27 @@ fun FeatureCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .springBounceClick()
+            .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }
     ) {
         Column(
-            modifier = Modifier.padding(14.dp)
+            modifier = Modifier.padding(16.dp)
         ) {
             Surface(
                 color = color.copy(alpha = 0.12f),
                 shape = CircleShape,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier.size(42.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(imageVector = icon, contentDescription = title, tint = color, modifier = Modifier.size(20.dp))
+                    Icon(imageVector = icon, contentDescription = title, tint = color, modifier = Modifier.size(22.dp))
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text(text = title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
             Text(text = desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -339,16 +396,30 @@ fun SpecialistCard(
     onClick: () -> Unit
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.clickable { onClick() }
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp,
+        modifier = Modifier
+            .springBounceClick()
+            .clickable { onClick() }
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp).widthIn(max = 110.dp)
+            modifier = Modifier
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .widthIn(min = 120.dp, max = 140.dp)
         ) {
-            Text("🩺", fontSize = 20.sp)
-            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = CircleShape,
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("🩺", fontSize = 22.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = agent.displayNameId,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -359,9 +430,21 @@ fun SpecialistCard(
                 text = agent.specialtyId,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Text(
+                    text = "Konsultasi ›",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
         }
     }
 }

@@ -1,5 +1,8 @@
 package com.medbot.app.presentation.knowledge
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,12 +12,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.NoteAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,6 +28,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
+import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.model.RagDocument
 import com.medbot.app.domain.model.SearchResult
 import com.medbot.app.domain.repository.RagRepository
@@ -33,6 +40,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,47 +58,65 @@ class KnowledgeViewModel(
     private val _isIngesting = MutableStateFlow(false)
     val isIngesting: StateFlow<Boolean> = _isIngesting.asStateFlow()
 
-    fun ingestSampleClinicalGuide() {
+    private val _ingestMessage = MutableStateFlow<String?>(null)
+    val ingestMessage: StateFlow<String?> = _ingestMessage.asStateFlow()
+
+    fun ingestDocumentFromUri(
+        fileName: String,
+        fileUri: String,
+        mimeType: String,
+        inputStream: InputStream
+    ) {
         viewModelScope.launch {
             _isIngesting.value = true
+            _ingestMessage.value = "Sedang memproses $fileName..."
             try {
-                val sampleContent = """
-                    PANDUAN PRAKTIK KLINIS PUSKESMAS & DOKTER KELUARGA (KEMENKES RI)
-                    
-                    BAB 1: DEMAM BERDARAH DENGUE (DBD)
-                    Kriteria Diagnosis DBD:
-                    1. Demam mendadak tinggi kontinu selama 2-7 hari.
-                    2. Manifestasi perdarahan: uji torniket positif, petekie, purpura, perdarahan gusi, epistaksis.
-                    3. Trombositopenia (Trombosit < 100.000 /µL).
-                    4. Tanda kebocoran plasma: peningkatan hematokrit >= 20%, efusi pleura, atau asites.
-                    
-                    Tanda Bahaya (Warning Signs) DBD:
-                    - Nyeri perut hebat atau nyeri tekan abdomen.
-                    - Muntah persisten terus-menerus.
-                    - Akumulasi cairan klinis (asites/efusi).
-                    - Perdarahan mukosa.
-                    - Letargi, gelisah, atau penurunan kesadaran.
-                    - Pembesaran hati > 2 cm.
-                    - Peningkatan hematokrit bersamaan dengan penurunan cepat trombosit.
-                    
-                    BAB 2: MANAJEMEN HIPERTENSI PRIMER
-                    Target Tekanan Darah:
-                    - Dewasa umum: < 140/90 mmHg.
-                    - Diabetes atau Penyakit Ginjal Kronis: < 130/80 mmHg.
-                    Lini pertama terapi: Modifikasi gaya hidup (Diet DASH rendah garam < 2 gram/hari, olahraga aerobik 150 menit/minggu) + Amlodipin 5 mg atau Captopril 25 mg.
-                """.trimIndent()
-
-                val stream = ByteArrayInputStream(sampleContent.toByteArray(Charsets.UTF_8))
-                ingestSafDocumentsUseCase.execute(
-                    fileName = "Panduan_Praktik_Klinis_Kemenkes.pdf",
-                    fileUri = "saf://documents/Panduan_Praktik_Klinis_Kemenkes.pdf",
-                    mimeType = "application/pdf",
-                    inputStream = stream
-                )
+                val res = ingestSafDocumentsUseCase.execute(fileName, fileUri, mimeType, inputStream)
+                if (res.isSuccess) {
+                    _ingestMessage.value = "Sukses mengindeks $fileName (${res.getOrNull()?.chunkCount} Chunks Vektor)"
+                } else {
+                    _ingestMessage.value = "Gagal memproses dokumen: ${res.exceptionOrNull()?.message}"
+                }
             } finally {
                 _isIngesting.value = false
             }
         }
+    }
+
+    fun ingestSampleClinicalGuide() {
+        val sampleContent = """
+            PANDUAN PRAKTIK KLINIS PUSKESMAS & DOKTER KELUARGA (KEMENKES RI)
+            
+            BAB 1: DEMAM BERDARAH DENGUE (DBD)
+            Kriteria Diagnosis DBD:
+            1. Demam mendadak tinggi kontinu selama 2-7 hari.
+            2. Manifestasi perdarahan: uji torniket positif, petekie, purpura, perdarahan gusi, epistaksis.
+            3. Trombositopenia (Trombosit < 100.000 /µL).
+            4. Tanda kebocoran plasma: peningkatan hematokrit >= 20%, efusi pleura, atau asites.
+            
+            Tanda Bahaya (Warning Signs) DBD:
+            - Nyeri perut hebat atau nyeri tekan abdomen.
+            - Muntah persisten terus-menerus.
+            - Akumulasi cairan klinis (asites/efusi).
+            - Perdarahan mukosa.
+            - Letargi, gelisah, atau penurunan kesadaran.
+            - Pembesaran hati > 2 cm.
+            - Peningkatan hematokrit bersamaan dengan penurunan cepat trombosit.
+            
+            BAB 2: MANAJEMEN HIPERTENSI PRIMER
+            Target Tekanan Darah:
+            - Dewasa umum: < 140/90 mmHg.
+            - Diabetes atau Penyakit Ginjal Kronis: < 130/80 mmHg.
+            Lini pertama terapi: Modifikasi gaya hidup (Diet DASH rendah garam < 2 gram/hari, olahraga aerobik 150 menit/minggu) + Amlodipin 5 mg atau Captopril 25 mg.
+        """.trimIndent()
+
+        val stream = ByteArrayInputStream(sampleContent.toByteArray(Charsets.UTF_8))
+        ingestDocumentFromUri(
+            fileName = "Panduan_Praktik_Klinis_Kemenkes.pdf",
+            fileUri = "saf://documents/Panduan_Praktik_Klinis_Kemenkes.pdf",
+            mimeType = "application/pdf",
+            inputStream = stream
+        )
     }
 
     fun searchKnowledge(query: String) {
@@ -126,11 +152,34 @@ fun KnowledgeBaseScreen(
     viewModel: KnowledgeViewModel,
     onNavigateBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val documents by viewModel.documents.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val isIngesting by viewModel.isIngesting.collectAsState()
+    val ingestMsg by viewModel.ingestMessage.collectAsState()
 
     var testQuery by remember { mutableStateOf("") }
+
+    // Native SAF Document Picker Activity Result Launcher
+    val safDocPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val contentResolver = context.contentResolver
+            val inputStream = contentResolver.openInputStream(uri)
+            val fileName = uri.lastPathSegment ?: "dokumen_saf.pdf"
+            val mimeType = contentResolver.getType(uri) ?: "application/pdf"
+
+            if (inputStream != null) {
+                viewModel.ingestDocumentFromUri(
+                    fileName = fileName,
+                    fileUri = uri.toString(),
+                    mimeType = mimeType,
+                    inputStream = inputStream
+                )
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -138,16 +187,19 @@ fun KnowledgeBaseScreen(
                 title = "Knowledge Base RAG",
                 subtitle = "Penyimpanan & Indeks Vektor Dokumen SAF",
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Kembali")
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.ingestSampleClinicalGuide() },
-                        enabled = !isIngesting
+                        onClick = {
+                            safDocPickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "*/*"))
+                        },
+                        enabled = !isIngesting,
+                        modifier = Modifier.springBounceClick()
                     ) {
-                        Icon(Icons.Default.NoteAdd, contentDescription = "Impor SAF", tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = "Pilih Dokumen SAF", tint = MaterialTheme.colorScheme.primary)
                     }
                 }
             )
@@ -183,24 +235,49 @@ fun KnowledgeBaseScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "MedBot memecah dokumen menjadi potongan 512-token dengan overlap 50-token dan menghitung vektor dense 384 dimensi secara 100% lokal.",
+                            text = "Pilih file PDF atau TXT panduan medis dari penyimpanan perangkat Anda via Android Storage Access Framework (SAF).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        Button(
-                            onClick = { viewModel.ingestSampleClinicalGuide() },
-                            enabled = !isIngesting,
-                            shape = RoundedCornerShape(8.dp)
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (isIngesting) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Mengindeks Dokumen...")
-                            } else {
-                                Icon(Icons.Default.UploadFile, contentDescription = "Impor")
+                            Button(
+                                onClick = {
+                                    safDocPickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "*/*"))
+                                },
+                                enabled = !isIngesting,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).springBounceClick()
+                            ) {
+                                Icon(Icons.Default.UploadFile, contentDescription = "Pilih File")
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Muat Dokumen Panduan Klinis Kemenkes")
+                                Text("Pilih File SAF")
+                            }
+
+                            OutlinedButton(
+                                onClick = { viewModel.ingestSampleClinicalGuide() },
+                                enabled = !isIngesting,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f).springBounceClick()
+                            ) {
+                                Text("Panduan Kemenkes")
+                            }
+                        }
+
+                        if (isIngesting) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = ingestMsg ?: "Sedang memproses dokumen...",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
@@ -209,7 +286,7 @@ fun KnowledgeBaseScreen(
 
             // Test Vector Search Query Box
             item {
-                Text("Uji Pencarian Semantik Vektor", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Text("Uji Pencarian Semantik Vektor (Cosine Similarity)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = testQuery,
@@ -217,11 +294,11 @@ fun KnowledgeBaseScreen(
                         testQuery = it
                         viewModel.searchKnowledge(it)
                     },
-                    placeholder = { Text("Contoh: tanda bahaya dbd, target tensi darah") },
+                    placeholder = { Text("Contoh: tanda bahaya dbd, target tensi darah diabetes") },
                     trailingIcon = {
                         Icon(Icons.Default.Search, contentDescription = "Cari")
                     },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -238,11 +315,11 @@ fun KnowledgeBaseScreen(
 
                 items(searchResults) { result ->
                     Card(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -253,10 +330,17 @@ fun KnowledgeBaseScreen(
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.primary
                                 )
-                                Text(
-                                    text = "Skor: ${"%.3f".format(result.similarityScore)}",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                                )
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "Skor: ${"%.3f".format(result.similarityScore)}",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
@@ -286,7 +370,7 @@ fun KnowledgeBaseScreen(
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "Belum ada dokumen yang diindeks. Tekan tombol di atas untuk memuat dokumen.",
+                            text = "Belum ada dokumen yang diindeks. Tekan tombol di atas untuk memilih file dari SAF.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -309,7 +393,7 @@ fun DocumentItemCard(doc: RagDocument, onDelete: () -> Unit) {
     }
 
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
@@ -323,7 +407,7 @@ fun DocumentItemCard(doc: RagDocument, onDelete: () -> Unit) {
                 Surface(
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                     shape = CircleShape,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(42.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = MaterialTheme.colorScheme.primary)
@@ -343,7 +427,7 @@ fun DocumentItemCard(doc: RagDocument, onDelete: () -> Unit) {
                     )
                 }
             }
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
                 Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
             }
         }
