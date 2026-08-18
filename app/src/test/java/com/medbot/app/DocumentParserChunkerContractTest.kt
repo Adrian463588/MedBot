@@ -75,7 +75,8 @@ class DocumentParserChunkerContractTest {
             mimeType = "text/markdown"
         )
 
-        assertEquals(1, parsed.totalPageCount)
+        assertEquals(0, parsed.totalPageCount)
+        assertEquals(0, parsed.pages.single().pageNumber)
         assertEquals("Triage", parsed.pages.single().sectionTitle)
         assertFalse(parsed.pages.single().text.contains('\u0000'))
         assertTrue(parsed.pages.single().text.contains("Tanda bahaya"))

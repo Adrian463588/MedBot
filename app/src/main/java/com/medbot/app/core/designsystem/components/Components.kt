@@ -1,104 +1,114 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.medbot.app.core.designsystem.components
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import android.graphics.Bitmap
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import com.medbot.app.R
-import com.medbot.app.core.designsystem.theme.*
-import com.medbot.app.domain.model.Citation
-import com.medbot.app.domain.model.UrgencyLevel
-
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import com.medbot.app.R
+import com.medbot.app.core.designsystem.theme.UrgencyEmergencyRed
+import com.medbot.app.core.designsystem.theme.UrgencyHighOrange
+import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
+import com.medbot.app.core.designsystem.theme.UrgencyMediumYellow
+import com.medbot.app.core.designsystem.theme.UrgencyInsufficientSlate
+import com.medbot.app.domain.model.Citation
+import com.medbot.app.domain.model.UrgencyLevel
 
-/**
- * Microinteraction modifier: Bouncing scale animation on touch press with tactile haptic feedback.
- */
-fun Modifier.springBounceClick(scaleDown: Float = 0.94f): Modifier = Modifier.composed {
+/** Press feedback observes real pointer input and leaves click handling to the control. */
+fun Modifier.springBounceClick(scaleDown: Float = 0.98f): Modifier = composed {
     val haptic = LocalHapticFeedback.current
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    LaunchedEffect(isPressed) {
-        if (isPressed) {
-            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        }
-    }
-
+    var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) scaleDown else 1f,
+        targetValue = if (pressed) scaleDown else 1f,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
         ),
-        label = "bounce"
+        label = "pressScale"
     )
-    this
-        .pointerInput(interactionSource) {
-            awaitEachGesture {
-                val down = awaitFirstDown(
-                    requireUnconsumed = false,
-                    pass = PointerEventPass.Initial
-                )
-                val press = PressInteraction.Press(down.position)
-                interactionSource.tryEmit(press)
-                val up = waitForUpOrCancellation(pass = PointerEventPass.Initial)
-                interactionSource.tryEmit(
-                    if (up == null) PressInteraction.Cancel(press) else PressInteraction.Release(press)
-                )
-            }
+
+    LaunchedEffect(pressed) {
+        if (pressed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    }
+
+    pointerInput(Unit) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            pressed = true
+            waitForUpOrCancellation(pass = PointerEventPass.Initial)
+            pressed = false
         }
-        .scale(scale)
+    }.scale(scale)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MedBotTopAppBar(
     title: String,
@@ -108,23 +118,18 @@ fun MedBotTopAppBar(
 ) {
     TopAppBar(
         title = {
-            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Column(modifier = Modifier.widthIn(max = 280.dp)) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.onBackground,
+                    style = MaterialTheme.typography.titleLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (!subtitle.isNullOrBlank()) {
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -133,6 +138,9 @@ fun MedBotTopAppBar(
         },
         navigationIcon = { navigationIcon?.invoke() },
         actions = actions,
+        // The root Scaffold owns vertical system-bar and IME insets. Keep the
+        // bar aligned to that content instead of consuming the same top inset.
+        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.background,
             scrolledContainerColor = MaterialTheme.colorScheme.surface
@@ -140,49 +148,56 @@ fun MedBotTopAppBar(
     )
 }
 
-@Composable
-fun MedBotBottomBar(
-    currentRoute: String,
-    onNavigate: (String) -> Unit
-) {
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp
-    ) {
-        val items = listOf(
-            Triple("home", stringResource(R.string.nav_home), Icons.Default.Home to Icons.Outlined.Home),
-            Triple("skin_lineage", stringResource(R.string.nav_skin), Icons.Default.Face to Icons.Outlined.Face),
-            Triple("knowledge", stringResource(R.string.nav_knowledge), Icons.AutoMirrored.Filled.MenuBook to Icons.AutoMirrored.Outlined.MenuBook),
-            Triple("tools", stringResource(R.string.nav_tools), Icons.Default.MedicalServices to Icons.Outlined.MedicalServices)
-        )
+private data class NavigationDestination(
+    val route: String,
+    val label: String,
+    val selectedIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    val unselectedIcon: androidx.compose.ui.graphics.vector.ImageVector
+)
 
-        items.forEach { (route, label, icons) ->
-            val isSelected = currentRoute == route
+@Composable
+private fun navigationDestinations(): List<NavigationDestination> = listOf(
+    NavigationDestination("home", stringResource(R.string.nav_home), Icons.Filled.Home, Icons.Outlined.Home),
+    NavigationDestination("skin_lineage", stringResource(R.string.nav_skin), Icons.Filled.Face, Icons.Outlined.Face),
+    NavigationDestination("knowledge", stringResource(R.string.nav_knowledge), Icons.AutoMirrored.Filled.MenuBook, Icons.AutoMirrored.Outlined.MenuBook),
+    NavigationDestination("tools", stringResource(R.string.nav_tools), Icons.Filled.MedicalServices, Icons.Outlined.MedicalServices)
+)
+
+@Composable
+fun MedBotBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
+    NavigationBar {
+        navigationDestinations().forEach { destination ->
+            val selected = currentRoute == destination.route
             NavigationBarItem(
-                selected = isSelected,
-                onClick = { onNavigate(route) },
+                selected = selected,
+                onClick = { onNavigate(destination.route) },
                 icon = {
                     Icon(
-                        imageVector = if (isSelected) icons.first else icons.second,
-                        contentDescription = label,
-                        modifier = Modifier.size(24.dp),
-                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                        contentDescription = destination.label
                     )
                 },
-                label = {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 11.sp
-                        )
+                label = { Text(destination.label, maxLines = 1) }
+            )
+        }
+    }
+}
+
+@Composable
+fun MedBotNavigationRail(currentRoute: String, onNavigate: (String) -> Unit) {
+    NavigationRail {
+        navigationDestinations().forEach { destination ->
+            val selected = currentRoute == destination.route
+            NavigationRailItem(
+                selected = selected,
+                onClick = { onNavigate(destination.route) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                        contentDescription = destination.label
                     )
                 },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                label = { Text(destination.label, maxLines = 1) }
             )
         }
     }
@@ -194,100 +209,51 @@ fun StatusBannerCard(
     modelName: String?,
     ragDocCount: Int,
     onManageModel: () -> Unit,
-    onManageRag: () -> Unit,
-    modifier: Modifier = Modifier
+    onManageRag: () -> Unit
 ) {
-    // Pulsing halo animation for on-device AI status
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseAlpha"
-    )
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = if (isModelLoaded) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MedicalGradient)
-                .padding(18.dp)
-        ) {
-            val isCompact = maxWidth < 500.dp
-            Column {
-                if (isCompact) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        StatusBannerTitle(isModelLoaded, pulseAlpha)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        StatusBannerAction(onManageModel)
-                    }
-                } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        StatusBannerTitle(
-                            isModelLoaded = isModelLoaded,
-                            pulseAlpha = pulseAlpha,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        StatusBannerAction(onManageModel)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
+        Column(modifier = Modifier.padding(MedBotSpacing.large)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = if (isModelLoaded) Icons.Filled.Memory else Icons.Filled.WarningAmber,
+                    contentDescription = null,
+                    tint = if (isModelLoaded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+                Spacer(modifier = Modifier.width(MedBotSpacing.small))
                 Text(
-                    text = when {
-                        isModelLoaded && modelName != null -> stringResource(R.string.status_active_model, modelName)
-                        isModelLoaded -> stringResource(R.string.status_active_model_unknown)
-                        else -> stringResource(R.string.status_model_source)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.9f)
+                    text = if (isModelLoaded) stringResource(R.string.status_ai_ready) else stringResource(R.string.status_model_not_loaded),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
                 )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 12.dp),
-                    color = Color.White.copy(alpha = 0.25f)
-                )
-
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.LibraryBooks,
-                            contentDescription = stringResource(R.string.nav_knowledge),
-                            modifier = Modifier.size(18.dp),
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.status_rag_count, ragDocCount),
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = Color.White
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.action_open_rag),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MedicalMint,
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .heightIn(min = 48.dp)
-                            .wrapContentHeight(Alignment.CenterVertically)
-                            .springBounceClick()
-                            .clickable(role = Role.Button) { onManageRag() }
-                    )
+            }
+            Spacer(modifier = Modifier.height(MedBotSpacing.small))
+            Text(
+                text = if (isModelLoaded && !modelName.isNullOrBlank()) {
+                    stringResource(R.string.status_active_model, modelName)
+                } else {
+                    stringResource(R.string.status_model_source)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(MedBotSpacing.xSmall))
+            Text(
+                text = stringResource(R.string.status_rag_count, ragDocCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(MedBotSpacing.medium))
+            AdaptiveFlowRow {
+                Button(onClick = onManageModel, modifier = Modifier.springBounceClick()) {
+                    Text(stringResource(R.string.action_manage_model))
+                }
+                androidx.compose.material3.TextButton(onClick = onManageRag, modifier = Modifier.springBounceClick()) {
+                    Text(stringResource(R.string.action_open_rag))
                 }
             }
         }
@@ -295,207 +261,87 @@ fun StatusBannerCard(
 }
 
 @Composable
-private fun StatusBannerTitle(
-    isModelLoaded: Boolean,
-    pulseAlpha: Float,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-    ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .background(
-                    color = if (isModelLoaded) UrgencyLowGreen.copy(alpha = pulseAlpha) else UrgencyMediumYellow,
-                    shape = CircleShape
-                )
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = stringResource(
-                if (isModelLoaded) R.string.status_ai_ready else R.string.status_model_not_loaded
-            ),
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        )
-    }
-}
-
-@Composable
-private fun StatusBannerAction(onClick: () -> Unit) {
-    Surface(
-        color = Color.White.copy(alpha = 0.2f),
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .springBounceClick()
-            .clickable(role = Role.Button, onClick = onClick)
-    ) {
-        Box(
-            modifier = Modifier.padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stringResource(R.string.action_manage_model),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
-            )
-        }
-    }
-}
-
-@Composable
-fun SpecialistBadge(
-    agentName: String,
-    specialty: String,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
-        modifier = modifier
-    ) {
+fun SpecialistBadge(agentName: String, specialty: String, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.small, modifier = modifier) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = MedBotSpacing.small, vertical = MedBotSpacing.xSmall)
         ) {
-            Text(text = "🩺", fontSize = 13.sp)
-            Spacer(modifier = Modifier.width(6.dp))
+            Icon(Icons.Filled.LocalHospital, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(MedBotSpacing.xSmall))
             Column {
-                Text(
-                    text = agentName,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = specialty,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(agentName, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                Text(specialty, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 @Composable
-fun UrgencyBadge(
-    urgency: UrgencyLevel,
-    modifier: Modifier = Modifier
-) {
-    val bg = when (urgency) {
+fun UrgencyBadge(urgency: UrgencyLevel, modifier: Modifier = Modifier) {
+    val color = when (urgency) {
         UrgencyLevel.LOW -> UrgencyLowGreen
         UrgencyLevel.MEDIUM -> UrgencyMediumYellow
         UrgencyLevel.HIGH -> UrgencyHighOrange
         UrgencyLevel.EMERGENCY -> UrgencyEmergencyRed
+        UrgencyLevel.INSUFFICIENT_DATA -> UrgencyInsufficientSlate
     }
-
     Surface(
-        color = bg.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(20.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, bg.copy(alpha = 0.5f)),
+        color = color.copy(alpha = 0.12f),
+        shape = MaterialTheme.shapes.small,
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.45f)),
         modifier = modifier
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .background(color = bg, shape = CircleShape)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = stringResource(R.string.urgency_format, urgency.labelId),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = bg
-            )
-        }
+        Text(
+            text = stringResource(R.string.urgency_format, urgency.labelId),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            modifier = Modifier.padding(horizontal = MedBotSpacing.small, vertical = MedBotSpacing.xSmall)
+        )
     }
 }
 
 @Composable
-fun CitationsDialog(
-    citations: List<Citation>,
-    onDismiss: () -> Unit
-) {
+fun CitationsDialog(citations: List<Citation>, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(MedBotSpacing.medium),
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surface
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(MedBotSpacing.large)
                     .heightIn(max = 600.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                        contentDescription = stringResource(R.string.citation_title),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.citation_title),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(MedBotSpacing.small))
+                    Text(stringResource(R.string.citation_title), style = MaterialTheme.typography.titleLarge)
                 }
-                Spacer(modifier = Modifier.height(14.dp))
-
+                Spacer(modifier = Modifier.height(MedBotSpacing.medium))
                 citations.forEachIndexed { index, citation ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                text = if (citation.pageNumber > 0) {
-                                    stringResource(
-                                        R.string.citation_page,
-                                        "${index + 1}. ${citation.documentTitle}",
-                                        citation.pageNumber
-                                    )
-                                } else {
-                                    "${index + 1}. ${citation.documentTitle} — ${stringResource(R.string.citation_non_paginated)}"
-                                },
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            if (citation.sectionTitle.isNotBlank()) {
-                                Text(
-                                    text = stringResource(R.string.citation_section, citation.sectionTitle),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "\"${citation.snippet}\"",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = MedBotSpacing.small)) {
+                        Text(
+                            text = if (citation.pageNumber > 0) {
+                                stringResource(R.string.citation_page, "${index + 1}. ${citation.documentTitle}", citation.pageNumber)
+                            } else {
+                                "${index + 1}. ${citation.documentTitle} — ${stringResource(R.string.citation_non_paginated)}"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (citation.sectionTitle.isNotBlank()) {
+                            Text(stringResource(R.string.citation_section, citation.sectionTitle), style = MaterialTheme.typography.labelMedium)
                         }
+                        Text(citation.snippet, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = MedBotSpacing.xSmall))
+                        if (index < citations.lastIndex) HorizontalDivider(modifier = Modifier.padding(top = MedBotSpacing.small))
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().springBounceClick()
-                ) {
+                Spacer(modifier = Modifier.height(MedBotSpacing.medium))
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth().springBounceClick()) {
                     Text(stringResource(R.string.action_close_citations))
                 }
             }
@@ -504,66 +350,23 @@ fun CitationsDialog(
 }
 
 @Composable
-fun MarkdownText(
-    text: String,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.onSurface
-) {
+fun MarkdownText(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
     Column(modifier = modifier) {
-        val lines = text.lines()
-        for (line in lines) {
+        text.lines().forEach { line ->
             when {
-                line.startsWith("### ") -> {
-                    Text(
-                        text = line.removePrefix("### ").trim(),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
+                line.startsWith("### ") -> Text(line.removePrefix("### ").trim(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = MedBotSpacing.small))
+                line.startsWith("## ") -> Text(line.removePrefix("## ").trim(), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = MedBotSpacing.medium))
+                line.startsWith("- ") || line.startsWith("* ") -> Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text("•", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = MedBotSpacing.small))
+                    Text(line.substring(2).trim(), style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.weight(1f))
                 }
-                line.startsWith("## ") -> {
-                    Text(
-                        text = line.removePrefix("## ").trim(),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
-                    )
-                }
-                line.startsWith("- ") || line.startsWith("* ") -> {
-                    Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 2.dp, bottom = 2.dp)) {
-                        Text("• ", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = line.substring(2).trim(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = color,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                line == "---" -> {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                }
-                else -> {
-                    if (line.isNotBlank()) {
-                        Text(
-                            text = line.trim(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = color,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
-                    }
-                }
+                line == "---" -> HorizontalDivider(modifier = Modifier.padding(vertical = MedBotSpacing.small))
+                line.isNotBlank() -> Text(line.trim(), style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.padding(vertical = 2.dp))
             }
         }
     }
 }
 
-/**
- * Animated Streaming Typewriter Text with blinking cursor
- */
 @Composable
 fun StreamingTypewriterText(
     text: String,
@@ -571,181 +374,64 @@ fun StreamingTypewriterText(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "cursor")
-    val cursorAlpha by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "cursorBlink"
-    )
-
     Column(modifier = modifier) {
         MarkdownText(text = text, color = color)
         if (isGenerating) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(width = 8.dp, height = 16.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha),
-                            shape = RoundedCornerShape(2.dp)
-                        )
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.streaming_typing),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = MedBotSpacing.small)) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(modifier = Modifier.width(MedBotSpacing.small))
+                Text(stringResource(R.string.streaming_typing), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
 }
 
-/**
- * Interactive Skin Split Slider Comparator for Before-After Lesion Analysis
- */
 @Composable
 fun InteractiveSkinSplitComparator(
-    beforeBitmap: android.graphics.Bitmap?,
-    afterBitmap: android.graphics.Bitmap?,
-    beforeLabel: String = "Hari ke-1 (Sebelum)",
-    afterLabel: String = "Hari ini (Terkini)",
+    beforeBitmap: Bitmap?,
+    afterBitmap: Bitmap?,
+    beforeLabel: String,
+    afterLabel: String,
     modifier: Modifier = Modifier
 ) {
     var splitRatio by remember { mutableFloatStateOf(0.5f) }
-    val sliderDescription = stringResource(R.string.comparator_slider_description)
+    val sliderLabel = stringResource(R.string.comparator_slider_description)
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(MedBotSpacing.medium), modifier = Modifier.fillMaxWidth()) {
+            Text(beforeLabel, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            Text(afterLabel, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MedBotSpacing.small), modifier = Modifier.fillMaxWidth().padding(top = MedBotSpacing.small)) {
+            BitmapPane(beforeBitmap, beforeLabel, Modifier.weight(splitRatio.coerceIn(0.2f, 0.8f)))
+            BitmapPane(afterBitmap, afterLabel, Modifier.weight((1f - splitRatio).coerceIn(0.2f, 0.8f)))
+        }
+        androidx.compose.material3.Slider(
+            value = splitRatio,
+            onValueChange = { splitRatio = it },
+            valueRange = 0.2f..0.8f,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = sliderLabel
+                    stateDescription = "${(splitRatio * 100).toInt()}%"
+                }
+        )
+    }
+}
 
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = modifier.fillMaxWidth()
+@Composable
+private fun BitmapPane(bitmap: Bitmap?, label: String, modifier: Modifier) {
+    Surface(
+        modifier = modifier.height(180.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🔍", fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Komparasi Split Slider Linimasa",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = "${(splitRatio * 100).toInt()}% Split",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+        if (bitmap != null) {
+            Image(bitmap = bitmap.asImageBitmap(), contentDescription = label, modifier = Modifier.fillMaxWidth())
+        } else {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.skin_photo_unavailable), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Visual Before-After Split Canvas
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Row(modifier = Modifier.fillMaxSize()) {
-                    // Left (Before) Image
-                    Box(
-                        modifier = Modifier
-                            .weight(splitRatio.coerceIn(0.1f, 0.9f))
-                            .fillMaxHeight()
-                            .background(Color(0xFFE2E8F0)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (beforeBitmap != null) {
-                            androidx.compose.foundation.Image(
-                                bitmap = beforeBitmap.asImageBitmap(),
-                                contentDescription = beforeLabel,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("📸", fontSize = 28.sp)
-                                Text(beforeLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-
-                    // Split Divider Line
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-
-                    // Right (After) Image
-                    Box(
-                        modifier = Modifier
-                            .weight((1f - splitRatio).coerceIn(0.1f, 0.9f))
-                            .fillMaxHeight()
-                            .background(Color(0xFFCBD5E1)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (afterBitmap != null) {
-                            androidx.compose.foundation.Image(
-                                bitmap = afterBitmap.asImageBitmap(),
-                                contentDescription = afterLabel,
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                            )
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🔬", fontSize = 28.sp)
-                                Text(afterLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Draggable Slider
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(beforeLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(afterLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            }
-
-            Slider(
-                value = splitRatio,
-                onValueChange = { splitRatio = it },
-                valueRange = 0.05f..0.95f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .semantics {
-                        contentDescription = sliderDescription
-                        stateDescription = "${(splitRatio * 100).toInt()}%"
-                    },
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            )
         }
     }
 }

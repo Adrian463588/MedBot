@@ -18,7 +18,7 @@ class DocumentChunkerAndSearchTest {
         val parsed = parser.parse(stream, "hipertensi.txt", "text/plain")
 
         assertTrue(parsed.pages.isNotEmpty())
-        assertEquals(1, parsed.totalPageCount)
+        assertEquals(0, parsed.totalPageCount)
         assertTrue(parsed.pages[0].text.contains("Hipertensi"))
         assertEquals(text.toByteArray().size.toLong(), parsed.byteSize)
         assertEquals(64, parsed.sha256.length)

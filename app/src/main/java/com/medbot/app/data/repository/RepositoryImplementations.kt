@@ -133,6 +133,9 @@ class ModelRepositoryImpl(
     private val llmEngine: LlmInferenceEngine
 ) : ModelRepository {
 
+    override val modelLoaded = llmEngine.modelLoaded
+    override val activeModelName = llmEngine.activeModelName
+
     override fun getInstalledModels(): Flow<List<ModelManifest>> {
         return kotlinx.coroutines.flow.flowOf(ModelRegistry.OFFICIAL_MODELS)
     }
@@ -162,8 +165,11 @@ class ModelRepositoryImpl(
     }
 
     override suspend fun deleteModel(modelId: String) {
-        downloadManager.cancelDownload(modelId)
+        downloadManager.deleteModel(modelId)
     }
+
+    override fun getInstalledModelPath(modelId: String): String? =
+        downloadManager.getInstalledModelPath(modelId)
 
     override suspend fun loadModelToRam(modelPath: String, backend: String): Boolean {
         return llmEngine.loadModel(modelPath, backend)
@@ -190,7 +196,12 @@ class RagRepositoryImpl(
         mimeType: String,
         inputStream: InputStream
     ): Result<RagDocument> {
-        return orchestrator.ingestDocument(fileName, fileUri, mimeType, inputStream)
+        val result = orchestrator.ingestDocument(fileName, fileUri, mimeType, inputStream)
+        return if (result.isSuccess) {
+            result
+        } else {
+            Result.failure(result.exceptionOrNull().toDomainRagFailure())
+        }
     }
 
     override suspend fun deleteDocument(docId: String) {
@@ -198,11 +209,44 @@ class RagRepositoryImpl(
     }
 
     override suspend fun searchSimilarChunks(query: String, topK: Int): List<SearchResult> {
-        return orchestrator.searchSimilar(query, topK)
+        return try {
+            orchestrator.searchSimilar(query, topK)
+        } catch (error: com.medbot.app.data.rag.RagProcessingException) {
+            throw com.medbot.app.domain.repository.RagUnavailableException(
+                failure = when (error.code) {
+                    com.medbot.app.data.rag.RagFailureCode.EMBEDDER_UNAVAILABLE -> com.medbot.app.domain.repository.RagFailure.EMBEDDER_UNAVAILABLE
+                    com.medbot.app.data.rag.RagFailureCode.PARSER_UNAVAILABLE -> com.medbot.app.domain.repository.RagFailure.PARSER_UNAVAILABLE
+                    com.medbot.app.data.rag.RagFailureCode.INVALID_DOCUMENT -> com.medbot.app.domain.repository.RagFailure.INVALID_DOCUMENT
+                },
+                message = error.message ?: "RAG capability is unavailable",
+                cause = error
+            )
+        }
     }
 
     override suspend fun getChunkCount(): Int {
         return orchestrator.getChunkCount()
+    }
+
+    private fun Throwable?.toDomainRagFailure(): Throwable {
+        val error = this as? com.medbot.app.data.rag.RagProcessingException
+        return if (error == null) {
+            com.medbot.app.domain.repository.RagUnavailableException(
+                com.medbot.app.domain.repository.RagFailure.INVALID_DOCUMENT,
+                "RAG document processing failed",
+                this
+            )
+        } else {
+            com.medbot.app.domain.repository.RagUnavailableException(
+                failure = when (error.code) {
+                    com.medbot.app.data.rag.RagFailureCode.EMBEDDER_UNAVAILABLE -> com.medbot.app.domain.repository.RagFailure.EMBEDDER_UNAVAILABLE
+                    com.medbot.app.data.rag.RagFailureCode.PARSER_UNAVAILABLE -> com.medbot.app.domain.repository.RagFailure.PARSER_UNAVAILABLE
+                    com.medbot.app.data.rag.RagFailureCode.INVALID_DOCUMENT -> com.medbot.app.domain.repository.RagFailure.INVALID_DOCUMENT
+                },
+                message = error.message ?: "RAG document processing failed",
+                cause = error
+            )
+        }
     }
 }
 
@@ -265,7 +309,7 @@ class SkinRepositoryImpl(
             colorDescription = entity.colorDesc,
             diameterDescription = entity.diameterDesc
         )
-        val urgency = try { UrgencyLevel.valueOf(entity.urgencyLevel) } catch (e: Exception) { UrgencyLevel.LOW }
+        val urgency = try { UrgencyLevel.valueOf(entity.urgencyLevel) } catch (e: Exception) { UrgencyLevel.INSUFFICIENT_DATA }
         val diffs = if (entity.differentialDxJson.isBlank()) emptyList() else entity.differentialDxJson.split("|||")
         val advice = if (entity.homeCareAdviceJson.isBlank()) emptyList() else entity.homeCareAdviceJson.split("|||")
 

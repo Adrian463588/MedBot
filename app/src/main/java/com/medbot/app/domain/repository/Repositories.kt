@@ -2,6 +2,7 @@ package com.medbot.app.domain.repository
 
 import com.medbot.app.domain.model.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import java.io.InputStream
 
 interface ChatRepository {
@@ -17,6 +18,8 @@ interface ChatRepository {
 }
 
 interface ModelRepository {
+    val modelLoaded: StateFlow<Boolean>
+    val activeModelName: StateFlow<String?>
     fun getInstalledModels(): Flow<List<ModelManifest>>
     fun getAvailableOnlineModels(): List<ModelManifest>
     fun getDownloadProgress(modelId: String): Flow<DownloadProgress?>
@@ -25,6 +28,7 @@ interface ModelRepository {
     suspend fun resumeDownload(modelId: String)
     suspend fun cancelDownload(modelId: String)
     suspend fun deleteModel(modelId: String)
+    fun getInstalledModelPath(modelId: String): String?
     suspend fun loadModelToRam(modelPath: String, backend: String): Boolean
     suspend fun unloadModel()
     fun isModelLoaded(): Boolean
@@ -44,12 +48,54 @@ interface RagRepository {
     suspend fun getChunkCount(): Int
 }
 
+/** A SAF document copied to an app-private staging file before parsing. */
+data class SafDocumentSource(
+    val fileName: String,
+    val fileUri: String,
+    val mimeType: String,
+    val localPath: String
+)
+
+/** Owns ContentResolver access and bounded SAF materialization for RAG ingestion. */
+interface SafDocumentGateway {
+    suspend fun materialize(uri: String): Result<SafDocumentSource>
+    suspend fun deleteStagedFile(path: String)
+}
+
+/** Owns model SAF metadata and persistable read permission handling. */
+interface ModelFileGateway {
+    suspend fun displayName(uri: String): Result<String>
+    suspend fun takePersistableReadPermission(uri: String): Result<Unit>
+}
+
+enum class RagFailure {
+    EMBEDDER_UNAVAILABLE,
+    PARSER_UNAVAILABLE,
+    INVALID_DOCUMENT
+}
+
+/** Domain-level boundary for a RAG capability that cannot produce evidence. */
+class RagUnavailableException(
+    val failure: RagFailure,
+    message: String,
+    cause: Throwable? = null
+) : IllegalStateException(message, cause)
+
 interface SkinRepository {
     fun getAllRecords(): Flow<List<SkinRecord>>
     fun getRecordsByBodyPart(bodyPart: String): Flow<List<SkinRecord>>
     suspend fun getRecordById(id: String): SkinRecord?
     suspend fun saveRecord(record: SkinRecord)
     suspend fun deleteRecord(id: String)
+}
+
+data class SkinCaptureTarget(val uri: String, val path: String)
+
+/** Owns photo file I/O so Compose only emits user intent and renders state. */
+interface SkinMediaGateway {
+    suspend fun createCaptureTarget(): SkinCaptureTarget
+    suspend fun importImage(uri: String): Result<String>
+    suspend fun discard(path: String)
 }
 
 interface DrugRepository {

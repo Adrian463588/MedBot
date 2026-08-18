@@ -41,14 +41,11 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         if (!modelsDir.exists() && !modelsDir.mkdirs()) return@withContext failure("STORAGE_UNAVAILABLE")
         if (!modelsDir.isDirectory) return@withContext failure("STORAGE_UNAVAILABLE")
 
-        val extension = when (manifest.format.name) {
-            "LITERTLM" -> "litertlm"
-            "GGUF" -> "gguf"
-            "ONNX" -> "onnx"
-            else -> return@withContext failure("MODEL_FORMAT_UNSUPPORTED")
+        if (manifest.format != com.medbot.app.domain.model.ModelFormat.LITERTLM) {
+            return@withContext failure("MODEL_FORMAT_UNSUPPORTED")
         }
-        val target = File(modelsDir, "${manifest.id}.$extension")
-        val part = File(modelsDir, "${manifest.id}.$extension.part")
+        val target = File(modelsDir, "${manifest.id}.litertlm")
+        val part = File(modelsDir, "${manifest.id}.litertlm.part")
 
         if (target.isFile && target.length() == manifest.sizeBytes && sha256(target) == manifest.sha256.lowercase()) {
             return@withContext success(target)

@@ -2,6 +2,7 @@ package com.medbot.app
 
 import com.medbot.app.domain.agents.AgentRegistry
 import com.medbot.app.domain.agents.TriageOrchestrator
+import com.medbot.app.domain.model.UrgencyLevel
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -45,6 +46,7 @@ class TriageRegistryContractTest {
         )
 
         assertEquals("general_practice", result.primarySpecialist)
-        assertEquals(0.92f, result.confidence, 0f)
+        assertEquals(0.0f, result.confidence, 0f)
+        assertEquals(UrgencyLevel.INSUFFICIENT_DATA, result.urgency)
     }
 }

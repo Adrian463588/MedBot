@@ -9,6 +9,19 @@ class TriageOrchestrator {
     suspend fun triage(query: String, hasImage: Boolean = false, imageType: String? = null): OrchestratorResult {
         val q = query.lowercase()
 
+        // Red flags take precedence over modality routing. Image metadata must
+        // never downgrade an emergency text query.
+        val initialUrgency = ToolRegistry.executeTool("assess_urgency", mapOf("query" to query))
+        if (initialUrgency.data["urgencyLevel"] == UrgencyLevel.EMERGENCY.name) {
+            return OrchestratorResult(
+                primarySpecialist = "emergency_medicine",
+                secondarySpecialists = listOf("general_practice", "cardiology"),
+                confidence = 0.0f,
+                urgency = UrgencyLevel.EMERGENCY,
+                reasoning = "RED_FLAG_MATCH: aturan tanda bahaya mendahului perutean citra."
+            )
+        }
+
         // 1. Image based direct routing
         if (hasImage || imageType != null) {
             val route = when (imageType) {
@@ -32,9 +45,9 @@ class TriageOrchestrator {
             return OrchestratorResult(
                 primarySpecialist = route,
                 secondarySpecialists = if (route == "dermatology") listOf("pharmacy") else listOf("general_practice"),
-                confidence = 0.92f,
-                urgency = UrgencyLevel.MEDIUM,
-                reasoning = "Perutean spesialis berdasarkan modalitas citra dan keluhan ($route)."
+                confidence = 0.0f,
+                urgency = UrgencyLevel.INSUFFICIENT_DATA,
+                reasoning = "INSUFFICIENT_DATA: citra hanya dapat dirutekan; model vision lokal belum memberikan hasil."
             )
         }
 
@@ -44,14 +57,14 @@ class TriageOrchestrator {
             "EMERGENCY" -> UrgencyLevel.EMERGENCY
             "HIGH" -> UrgencyLevel.HIGH
             "MEDIUM" -> UrgencyLevel.MEDIUM
-            else -> UrgencyLevel.LOW
+            else -> UrgencyLevel.INSUFFICIENT_DATA
         }
 
         if (detectedUrgency == UrgencyLevel.EMERGENCY) {
             return OrchestratorResult(
                 primarySpecialist = "emergency_medicine",
                 secondarySpecialists = listOf("general_practice", "cardiology"),
-                confidence = 0.98f,
+                confidence = 0.0f,
                 urgency = UrgencyLevel.EMERGENCY,
                 reasoning = "Tanda bahaya kegawatdaruratan terdeteksi. Diprioritaskan ke Dokter Gawat Darurat."
             )
@@ -137,7 +150,7 @@ class TriageOrchestrator {
         return OrchestratorResult(
             primarySpecialist = primary,
             secondarySpecialists = secondary,
-            confidence = 0.88f,
+            confidence = 0.0f,
             urgency = detectedUrgency,
             reasoning = "Analisis keluhan mencerminkan ranah spesialisasi $primary dengan dukungan spesialis ${secondary.joinToString(", ")}."
         )

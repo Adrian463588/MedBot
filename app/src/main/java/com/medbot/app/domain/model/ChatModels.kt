@@ -2,9 +2,9 @@ package com.medbot.app.domain.model
 
 import java.util.UUID
 
-enum class AppLanguage(val code: String, val displayName: String, val flag: String) {
-    INDONESIAN("id", "Bahasa Indonesia", "🇮🇩"),
-    ENGLISH("en", "English", "🇬🇧")
+enum class AppLanguage(val code: String, val displayName: String) {
+    INDONESIAN("id", "Bahasa Indonesia"),
+    ENGLISH("en", "English")
 }
 
 enum class PersonaTone(val id: String, val label: String, val promptModifier: String) {
@@ -73,8 +73,9 @@ data class DoctorAgent(
 data class OrchestratorResult(
     val primarySpecialist: String,
     val secondarySpecialists: List<String> = emptyList(),
-    val confidence: Float = 0.85f,
-    val urgency: UrgencyLevel = UrgencyLevel.LOW,
+    /** Zero means no calibrated probability is available for rule-based routing. */
+    val confidence: Float = 0.0f,
+    val urgency: UrgencyLevel = UrgencyLevel.INSUFFICIENT_DATA,
     val reasoning: String = ""
 )
 
@@ -82,7 +83,8 @@ enum class UrgencyLevel(val labelId: String, val labelEn: String, val hexColor: 
     LOW("Rendah", "Low", "#27AE60"),
     MEDIUM("Sedang", "Medium", "#F39C12"),
     HIGH("Tinggi", "High", "#E67E22"),
-    EMERGENCY("Gawat Darurat", "Emergency", "#E74C3C")
+    EMERGENCY("Gawat Darurat", "Emergency", "#E74C3C"),
+    INSUFFICIENT_DATA("Data tidak cukup", "Insufficient data", "#64748B")
 }
 
 data class Citation(

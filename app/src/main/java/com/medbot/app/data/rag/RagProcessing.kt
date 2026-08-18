@@ -5,7 +5,7 @@ import java.io.IOException
 /** Explicit local RAG availability states. */
 enum class RagFailureCode { EMBEDDER_UNAVAILABLE, PARSER_UNAVAILABLE, INVALID_DOCUMENT }
 
-/** Typed failure used instead of synthetic pages, vectors, or document metadata. */
+/** Typed failure used instead of invented pages, vectors, or document metadata. */
 class RagProcessingException(
     val code: RagFailureCode,
     message: String,

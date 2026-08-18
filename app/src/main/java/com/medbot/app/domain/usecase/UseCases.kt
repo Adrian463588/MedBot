@@ -37,14 +37,21 @@ class SendMessageUseCase(
         )
         chatRepository.insertMessage(userMsg)
 
+        if (imageUri != null) {
+            throw LocalInferenceException(
+                LocalInferenceFailure.VISION_UNAVAILABLE,
+                "No initialized local vision-capable runtime accepts image content."
+            )
+        }
+
         // 2. Query Rewriting with conversational context
         val contextualQuery = queryRewriter.rewriteQueryWithHistory(userQuery, history)
 
         // 3. Triage & Specialist Selection
         val triageResult = triageOrchestrator.triage(
             query = contextualQuery,
-            hasImage = imageUri != null,
-            imageType = imageType
+            hasImage = false,
+            imageType = null
         )
 
         val targetAgentId = personaOverride?.selectedAgentId?.takeIf { it != "orchestrator" }
@@ -52,7 +59,12 @@ class SendMessageUseCase(
         val agent = AgentRegistry.getAgentById(targetAgentId)
 
         // 4. Retrieve RAG Document Chunks
-        val searchResults = ragRepository.searchSimilarChunks(contextualQuery, topK = 4)
+        val indexedChunkCount = ragRepository.getChunkCount()
+        val searchResults = if (indexedChunkCount == 0) {
+            emptyList()
+        } else {
+            ragRepository.searchSimilarChunks(contextualQuery, topK = 4)
+        }
         val citations = searchResults.map {
             Citation(
                 documentTitle = it.documentTitle,
@@ -76,6 +88,10 @@ class SendMessageUseCase(
             val res = ToolRegistry.executeTool(toolName, mapOf("query" to contextualQuery))
             if (res.isSuccess) {
                 toolContext.append("\n[Hasil Perhitungan ${res.toolName}]: ${res.summary}\n")
+            } else if (res.status == com.medbot.app.domain.agents.tools.ToolResultStatus.UNAVAILABLE ||
+                res.status == com.medbot.app.domain.agents.tools.ToolResultStatus.INSUFFICIENT_DATA
+            ) {
+                toolContext.append("\n[${res.toolName}: ${res.status.name}. Jangan menyimpulkan hasil klinis dari tool ini.]\n")
             }
         }
 

@@ -19,6 +19,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -55,6 +58,10 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
     @Volatile private var runtime: RuntimeHandle? = null
     @Volatile private var activeModelPath: String? = null
     @Volatile private var lastFailure: ModelLoadResult.Unavailable? = null
+    private val _modelLoaded = MutableStateFlow(false)
+    val modelLoaded: StateFlow<Boolean> = _modelLoaded.asStateFlow()
+    private val _activeModelName = MutableStateFlow<String?>(null)
+    val activeModelName: StateFlow<String?> = _activeModelName.asStateFlow()
 
     /** True only after native engine initialization and conversation creation succeed. */
     fun isModelLoaded(): Boolean = runtime != null
@@ -111,6 +118,8 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
             runtime = candidate
             activeModelPath = model.absolutePath
             lastFailure = null
+            _modelLoaded.value = true
+            _activeModelName.value = model.absolutePath
             previous
         }
         old?.close()
@@ -123,6 +132,8 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
             val previous = runtime
             runtime = null
             activeModelPath = null
+            _modelLoaded.value = false
+            _activeModelName.value = null
             previous
         }
         old?.close()

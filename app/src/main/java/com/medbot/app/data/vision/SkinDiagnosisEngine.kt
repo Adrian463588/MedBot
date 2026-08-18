@@ -39,7 +39,7 @@ class SkinDiagnosisEngine : SkinAnalysisGateway {
         )
     }
 
-    /** Existing API now throws a typed unavailable state instead of saving fake data. */
+    /** Existing API now throws a typed unavailable state instead of saving invented data. */
     override fun analyzeSkinImage(imagePath: String, bodyPart: String, userNotes: String): SkinRecord {
         val result = analyzeSkinImageResult(imagePath, bodyPart, userNotes)
         throw SkinAnalysisException(result.status, result.reason)

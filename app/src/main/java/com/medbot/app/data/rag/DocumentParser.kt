@@ -68,8 +68,10 @@ class DocumentParser {
         val section = firstHeading(text).ifBlank { fileName }
         return ParsedDocument(
             fileName = fileName,
-            pages = listOf(ParsedPage(pageNumber = 1, text = text, sectionTitle = section)),
-            totalPageCount = 1,
+            // Plain text and Markdown have no authoritative page model. Keep
+            // page metadata unknown instead of inventing page 1.
+            pages = listOf(ParsedPage(pageNumber = 0, text = text, sectionTitle = section)),
+            totalPageCount = 0,
             byteSize = bytes.size.toLong(),
             sha256 = sha256(bytes)
         )

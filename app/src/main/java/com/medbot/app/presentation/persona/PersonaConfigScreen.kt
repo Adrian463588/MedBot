@@ -1,327 +1,230 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.medbot.app.presentation.persona
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
+import com.medbot.app.R
+import com.medbot.app.core.designsystem.components.AdaptiveContent
+import com.medbot.app.core.designsystem.components.AdaptiveFlowRow
+import com.medbot.app.core.designsystem.components.MedBotSpacing
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.agents.AgentRegistry
-import com.medbot.app.domain.model.*
-import com.medbot.app.domain.repository.UserPreferencesRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import javax.inject.Inject
-
-@HiltViewModel
-class PersonaViewModel @Inject constructor(
-    private val userPreferencesRepository: UserPreferencesRepository
-) : ViewModel() {
-
-    val personaConfig: StateFlow<PersonaConfig> = userPreferencesRepository.personaConfig
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PersonaConfig())
-
-    fun updateConfig(config: PersonaConfig) {
-        viewModelScope.launch {
-            userPreferencesRepository.updatePersonaConfig(config)
-        }
-    }
-
-}
+import com.medbot.app.domain.model.AppLanguage
+import com.medbot.app.domain.model.DetailDepth
+import com.medbot.app.domain.model.PersonaTone
+import com.medbot.app.presentation.common.appLanguageLabel
+import com.medbot.app.presentation.common.displayName
+import com.medbot.app.presentation.common.personaToneLabel
+import com.medbot.app.presentation.common.detailDepthLabel
+import com.medbot.app.presentation.common.specialty
 
 @Composable
-fun PersonaConfigScreen(
-    viewModel: PersonaViewModel,
-    onNavigateBack: () -> Unit
-) {
+fun PersonaConfigScreen(viewModel: PersonaViewModel, onNavigateBack: () -> Unit) {
     val config by viewModel.personaConfig.collectAsStateWithLifecycle()
-
     var selectedAgentId by remember(config.selectedAgentId) { mutableStateOf(config.selectedAgentId) }
     var selectedTone by remember(config.tone) { mutableStateOf(config.tone) }
     var selectedDepth by remember(config.depth) { mutableStateOf(config.depth) }
     var selectedLanguage by remember(config.language) { mutableStateOf(config.language) }
     var customInstructions by remember(config.customInstructions) { mutableStateOf(config.customInstructions) }
     var patientProfile by remember(config.patientProfileSummary) { mutableStateOf(config.patientProfileSummary) }
-    var agentSearchQuery by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
 
-    val filteredAgents = remember(agentSearchQuery) {
-        if (agentSearchQuery.isBlank()) {
-            AgentRegistry.ALL_AGENTS
-        } else {
-            AgentRegistry.ALL_AGENTS.filter {
-                it.displayNameId.contains(agentSearchQuery, ignoreCase = true) ||
-                it.specialtyId.contains(agentSearchQuery, ignoreCase = true)
-            }
+    val filteredAgents = remember(searchQuery, selectedLanguage) {
+        if (searchQuery.isBlank()) AgentRegistry.ALL_AGENTS else AgentRegistry.ALL_AGENTS.filter { agent ->
+            agent.displayNameId.contains(searchQuery, ignoreCase = true) ||
+                agent.displayNameEn.contains(searchQuery, ignoreCase = true) ||
+                agent.specialtyId.contains(searchQuery, ignoreCase = true) ||
+                agent.specialtyEn.contains(searchQuery, ignoreCase = true)
         }
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            MedBotTopAppBar(
-                title = "Personalisasi Persona AI",
-                subtitle = "Pilih Dokter Spesialis & Gaya Komunikasi",
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                actions = {
-                    TextButton(
-                        onClick = {
-                            viewModel.updateConfig(
-                                config.copy(
-                                    selectedAgentId = selectedAgentId,
-                                    tone = selectedTone,
-                                    depth = selectedDepth,
-                                    language = selectedLanguage,
-                                    customInstructions = customInstructions,
-                                    patientProfileSummary = patientProfile
-                                )
-                            )
-                            onNavigateBack()
-                        },
-                        modifier = Modifier.springBounceClick()
-                    ) {
-                        Text("Simpan", fontWeight = FontWeight.Bold)
-                    }
+    fun save() {
+         viewModel.onEvent(
+             PersonaUiEvent.SaveConfig(
+                 config.copy(
+                     selectedAgentId = selectedAgentId,
+                     tone = selectedTone,
+                     depth = selectedDepth,
+                     language = selectedLanguage,
+                     customInstructions = customInstructions,
+                     patientProfileSummary = patientProfile
+                 )
+             )
+         )
+        onNavigateBack()
+    }
+
+    Column {
+        MedBotTopAppBar(
+            title = stringResource(R.string.persona_title),
+            subtitle = stringResource(R.string.persona_subtitle),
+            navigationIcon = {
+                IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                 }
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp)
-        ) {
-            // Language Selection Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Bahasa Konsultasi (Language)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            AppLanguage.values().forEach { lang ->
+            },
+            actions = {
+                TextButton(onClick = ::save, modifier = Modifier.springBounceClick()) {
+                    Text(stringResource(R.string.action_save))
+                }
+            }
+        )
+        AdaptiveContent(modifier = Modifier.weight(1f), maxContentWidth = 840.dp) {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = MedBotSpacing.medium, vertical = MedBotSpacing.medium),
+                verticalArrangement = Arrangement.spacedBy(MedBotSpacing.large)
+            ) {
+                item {
+                    Section(title = stringResource(R.string.persona_language)) {
+                        AdaptiveFlowRow {
+                            AppLanguage.values().forEach { language ->
                                 FilterChip(
-                                    selected = selectedLanguage == lang,
-                                    onClick = { selectedLanguage = lang },
-                                    label = { Text("${lang.flag} ${lang.displayName}") },
+                                    selected = selectedLanguage == language,
+                                    onClick = { selectedLanguage = language },
+                                     label = { Text(appLanguageLabel(language)) },
                                     modifier = Modifier.springBounceClick()
                                 )
                             }
                         }
                     }
                 }
-            }
-
-            // Tone Selection Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Nada Bicara Dokter (Tone of Voice)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        PersonaTone.values().forEach { tone ->
-                            Surface(
-                                color = if (selectedTone == tone) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(12.dp),
-                                border = if (selectedTone == tone) androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .springBounceClick()
-                                    .clickable { selectedTone = tone }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(12.dp)
-                                ) {
-                                    RadioButton(
-                                        selected = selectedTone == tone,
-                                        onClick = { selectedTone = tone }
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(tone.label, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-                                        Text(tone.promptModifier.take(65) + "...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
+                item {
+                    Section(title = stringResource(R.string.persona_tone)) {
+                        AdaptiveFlowRow {
+                            PersonaTone.values().forEach { tone ->
+                                FilterChip(
+                                    selected = selectedTone == tone,
+                                    onClick = { selectedTone = tone },
+                                     label = { Text(personaToneLabel(tone)) },
+                                    modifier = Modifier.springBounceClick()
+                                )
                             }
                         }
                     }
                 }
-            }
-
-            // Depth Selection Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Tingkat Kedalaman Analisis (Detail Depth)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    Section(title = stringResource(R.string.persona_depth)) {
+                        AdaptiveFlowRow {
                             DetailDepth.values().forEach { depth ->
                                 FilterChip(
                                     selected = selectedDepth == depth,
                                     onClick = { selectedDepth = depth },
-                                    label = { Text(depth.label) },
+                                     label = { Text(detailDepthLabel(depth)) },
                                     modifier = Modifier.springBounceClick()
                                 )
                             }
                         }
                     }
                 }
-            }
-
-            // Patient Profile & Custom Instructions
-            item {
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Profil Medis Pasien", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = patientProfile,
-                            onValueChange = { patientProfile = it },
-                            placeholder = { Text("Contoh: Pasien Laki-laki 45 th, riwayat alergi penisilin & hipertensi...") },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2
-                        )
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text("Instruksi Khusus untuk AI", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = customInstructions,
-                            onValueChange = { customInstructions = it },
-                            placeholder = { Text("Contoh: Selalu sertakan tips gaya hidup rendah garam dan anjuran olahraga...") },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2
-                        )
-                    }
-                }
-            }
-
-            // Selectable 46 Doctors List
-            item {
-                Text("Pilih Dokter Spesialis Utama (${filteredAgents.size} Tersedia)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = agentSearchQuery,
-                    onValueChange = { agentSearchQuery = it },
-                    placeholder = { Text("Cari spesialis (misal: anak, kulit, jantung)...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Cari") },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            items(filteredAgents) { agent ->
-                val isSelected = selectedAgentId == agent.id
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .springBounceClick()
-                        .clickable { selectedAgentId = agent.id }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.padding(14.dp).fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                shape = CircleShape,
-                                modifier = Modifier.size(42.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text("🩺", fontSize = 20.sp)
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = agent.displayNameId,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = agent.specialtyId,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Terpilih",
-                                tint = MaterialTheme.colorScheme.primary
+                item {
+                    Section(title = stringResource(R.string.persona_context)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
+                            OutlinedTextField(
+                                value = patientProfile,
+                                onValueChange = { patientProfile = it },
+                                label = { Text(stringResource(R.string.persona_patient_profile)) },
+                                supportingText = { Text(stringResource(R.string.persona_patient_profile_support)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3
+                            )
+                            OutlinedTextField(
+                                value = customInstructions,
+                                onValueChange = { customInstructions = it },
+                                label = { Text(stringResource(R.string.persona_custom_instructions)) },
+                                supportingText = { Text(stringResource(R.string.persona_custom_instructions_support)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3
                             )
                         }
                     }
                 }
+                item {
+                    Section(title = stringResource(R.string.persona_agent_heading, filteredAgents.size)) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text(stringResource(R.string.persona_search_agents)) },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    }
+                }
+                items(filteredAgents, key = { it.id }) { agent ->
+                    val selected = selectedAgentId == agent.id
+                    Surface(
+                         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { selectedAgentId = agent.id }.springBounceClick(),
+                        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                        shape = MaterialTheme.shapes.medium,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(MedBotSpacing.medium),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.LocalHospital, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(MedBotSpacing.medium))
+                            Column(modifier = Modifier.weight(1f)) {
+                                 Text(agent.displayName(selectedLanguage), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                 Text(agent.specialty(selectedLanguage), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                            if (selected) Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.persona_selected))
+                        }
+                    }
+                }
+                item {
+                    Button(onClick = ::save, modifier = Modifier.fillMaxWidth().springBounceClick()) {
+                        Text(stringResource(R.string.action_save))
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun Section(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        content()
     }
 }

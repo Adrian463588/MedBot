@@ -25,7 +25,7 @@ class ComprehensiveMedicalToolsTest {
     }
 
     @Test
-    fun `ZScoreCalculatorTool calculates accurate WHO z-scores`() = runBlocking {
+    fun `ZScoreCalculatorTool fails closed without an official reference dataset`() = runBlocking {
         val tool = ZScoreCalculatorTool()
         val result = tool.execute(
             mapOf(
@@ -35,14 +35,12 @@ class ComprehensiveMedicalToolsTest {
                 "gender" to "male"
             )
         )
-        assertTrue(result.isSuccess)
-        assertNotNull(result.data["zWeightForAge"])
-        assertNotNull(result.data["statusNutrition"])
-        assertTrue(result.summary.contains("Status Gizi"))
+        assertFalse(result.isSuccess)
+        assertEquals(ToolResultStatus.UNAVAILABLE, result.status)
     }
 
     @Test
-    fun `PaediatricDosingTool calculates correct Paracetamol dosage`() = runBlocking {
+    fun `PaediatricDosingTool fails closed without a verified monograph`() = runBlocking {
         val tool = PaediatricDosingTool()
         val result = tool.execute(
             mapOf(
@@ -51,13 +49,12 @@ class ComprehensiveMedicalToolsTest {
                 "indication" to "demam"
             )
         )
-        assertTrue(result.isSuccess)
-        assertTrue(result.summary.contains("100–150 mg"))
-        assertTrue(result.summary.contains("Sirup 120mg/5ml"))
+        assertFalse(result.isSuccess)
+        assertEquals(ToolResultStatus.UNAVAILABLE, result.status)
     }
 
     @Test
-    fun `PaediatricDosingTool calculates correct Amoxicillin dosage`() = runBlocking {
+    fun `PaediatricDosingTool does not invent an antibiotic dose`() = runBlocking {
         val tool = PaediatricDosingTool()
         val result = tool.execute(
             mapOf(
@@ -66,13 +63,12 @@ class ComprehensiveMedicalToolsTest {
                 "indication" to "infeksi bakteri"
             )
         )
-        assertTrue(result.isSuccess)
-        assertTrue(result.summary.contains("Amoxicillin"))
-        assertTrue(result.summary.contains("200 mg"))
+        assertFalse(result.isSuccess)
+        assertEquals(ToolResultStatus.UNAVAILABLE, result.status)
     }
 
     @Test
-    fun `SkinAbcdEvaluatorTool classifies high risk when multiple criteria met`() = runBlocking {
+    fun `SkinAbcdEvaluatorTool fails closed without a validated clinical protocol`() = runBlocking {
         val tool = SkinAbcdEvaluatorTool()
         val result = tool.execute(
             mapOf(
@@ -82,10 +78,8 @@ class ComprehensiveMedicalToolsTest {
                 "diameter_mm" to 7.5
             )
         )
-        assertTrue(result.isSuccess)
-        val score = (result.data["totalRiskScore"] as Number).toDouble()
-        assertTrue(score >= 7.5)
-        assertTrue(result.summary.contains("Risiko Tinggi"))
+        assertFalse(result.isSuccess)
+        assertEquals(ToolResultStatus.UNAVAILABLE, result.status)
     }
 
     @Test
@@ -127,11 +121,14 @@ class ComprehensiveMedicalToolsTest {
             mapOf(
                 "test_name" to "hemoglobin",
                 "value" to 8.5,
-                "unit" to "g/dL"
+                "unit" to "g/dL",
+                "reference_low" to 12.0,
+                "reference_high" to 17.5,
+                "reference_source" to "Rentang pada laporan laboratorium"
             )
         )
         assertTrue(result.isSuccess)
-        assertEquals("Rendah (Anemia)", result.data["status"])
+        assertEquals("BELOW_REFERENCE", result.data["status"])
     }
 
     @Test
@@ -141,11 +138,14 @@ class ComprehensiveMedicalToolsTest {
             mapOf(
                 "test_name" to "gds",
                 "value" to 250.0,
-                "unit" to "mg/dL"
+                "unit" to "mg/dL",
+                "reference_low" to 70.0,
+                "reference_high" to 140.0,
+                "reference_source" to "Rentang pada laporan laboratorium"
             )
         )
         assertTrue(result.isSuccess)
-        assertEquals("Tinggi (Hiperglikemia)", result.data["status"])
+        assertEquals("ABOVE_REFERENCE", result.data["status"])
     }
 
     @Test
@@ -174,7 +174,10 @@ class ComprehensiveMedicalToolsTest {
             "interpret_lab_result" to mapOf(
                 "test_name" to "hemoglobin",
                 "value" to 14.0,
-                "unit" to "g/dL"
+                "unit" to "g/dL",
+                "reference_low" to 12.0,
+                "reference_high" to 17.5,
+                "reference_source" to "Rentang pada laporan laboratorium"
             )
         )
 
@@ -182,7 +185,11 @@ class ComprehensiveMedicalToolsTest {
             val tool = ToolRegistry.getTool(name)
             assertNotNull("Tool $name must be registered", tool)
             val res = ToolRegistry.executeTool(name, params)
-            assertTrue("Execution of $name should succeed", res.isSuccess)
+            if (name in setOf("calculate_zscore", "get_paediatric_dosing", "evaluate_skin_abcd")) {
+                assertEquals("$name must report unavailable", ToolResultStatus.UNAVAILABLE, res.status)
+            } else {
+                assertTrue("Execution of $name should succeed", res.isSuccess)
+            }
         }
     }
 }

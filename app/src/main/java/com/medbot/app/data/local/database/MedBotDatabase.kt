@@ -24,7 +24,7 @@ import com.medbot.app.data.local.entities.*
         ReminderEntity::class
     ],
     version = 2,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class MedBotDatabase : RoomDatabase() {
 

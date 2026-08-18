@@ -1,390 +1,190 @@
-# DESIGN.md — System Architecture & UI/UX Design System
-## MedBot: On-Device Medical Assistant (Jetpack Compose)
+# MedBot Design Contract — Anti AI Slop
 
-Dokumen ini menjelaskan arsitektur perangkat lunak, rancangan data flow, integrasi Storage Access Framework (SAF), arsitektur *In-App Resumable Model Downloader*, pipeline RAG lokal, sistem diagnosis visual *Skin Lineage*, skema basis data Room, serta sistem desain UI/UX berbasis Jetpack Compose & Material 3.
+Status: active UI/UX and architecture contract
+Scope: Kotlin, Jetpack Compose, Material 3, local-first clinical information support
 
----
+This document is the UI contract for MedBot. It is derived from `docs/AntiSlop/Reference1.md` and `docs/AntiSlop/Reference2.md`, then constrained by `AGENTS.md`, `PRD.md`, and the evidence boundary of this repository. A visual feature is not complete merely because it renders: it must have a real event path, a truthful state, an accessible target, and a responsive layout.
 
-## 1. Arsitektur Perangkat Lunak (Clean Architecture + UDF)
+## 1. Product posture
 
-MedBot mengimplementasikan prinsip **Clean Architecture** yang dipadukan dengan pola **Unidirectional Data Flow (UDF)** dan **MVVM** untuk memastikan pemisahan tanggung jawab (*separation of concerns*), kemudahan pengujian (*testability*), dan keandalan tinggi saat beroperasi offline.
+MedBot is a calm, local-first clinical information companion. It is not a doctor, diagnostic device, prescription service, emergency service, or cloud AI wrapper.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           PRESENTATION LAYER                                │
-│  Jetpack Compose UI  │  ViewModels  │  Navigation Graph  │  UI State (M3)   │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │ (Observes UI State / Sends Intents)
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              DOMAIN LAYER                                   │
-│  UseCases / Interactors  │  Domain Models (POJO)  │  Repository Interfaces  │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │ (Implements Interfaces)
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               DATA LAYER                                    │
-│ ┌──────────────────────┐ ┌───────────────────────┐ ┌──────────────────────┐ │
-│ │    AI & Inference    │ │   Knowledge & RAG     │ │   Local Persistence  │ │
-│ │  - LiteRT-LM Engine  │ │  - SAF Document Parser│ │  - Room Database     │ │
-│ │  - llama.cpp Wrapper │ │  - Local Embedder     │ │  - DataStore Prefs   │ │
-│ │  - Vision Processor  │ │  - Vector Store       │ │  - File Sandbox      │ │
-│ │  - Model Downloader  │ │                       │ │  - SAF Repositories  │ │
-│ └──────────────────────┘ └───────────────────────┘ └──────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
+The UI must never hide a missing capability behind a success state. Production code must not contain canned responses, synthetic clinical documents, fabricated model metadata, fake citations, heuristic skin diagnoses, default clinical inputs, emoji decoration, placeholder controls, or decorative AI theatre.
+
+The only accepted production AI path is:
+
+```text
+user action
+  -> ViewModel event
+  -> domain use case
+  -> repository/gateway
+  -> validated local asset/runtime
+  -> typed result
+  -> StateFlow
+  -> stateless Compose UI
 ```
 
-### 1.1 Struktur Paket & Modul Proyek
-```
-com.medbot.app/
-├── core/
-│   ├── common/             # Extension functions, Result wrapper, Constants
-│   ├── database/           # Room Database, TypeConverters, Migration
-│   ├── datastore/          # DataStore Preferences (Persona, Theme, SAF URIs)
-│   ├── designsystem/       # Material 3 Theme, Typography, Color, Components
-│   └── di/                 # Dagger Hilt Modules (AppModule, AiModule, DatabaseModule)
-├── data/
-│   ├── ai/                 # LiteRT-LM / llama.cpp engines, ModelLoader
-│   ├── download/           # WorkManager ResumableDownloadWorker, OkHttp Range Client
-│   ├── rag/                # SAF DocumentImporter, PDF Parser, Chunker, Embedder
-│   ├── vision/             # CameraX helper, ABCD Skin Evaluator, Vision Engine
-│   ├── repository/         # Implementasi repository (Chat, Model, RAG, Skin, Drug)
-│   └── local/              # Room DAOs & Entities
-├── domain/
-│   ├── model/              # Domain entities (ChatMessage, Agent, SkinRecord, DocChunk)
-│   ├── repository/         # Interface kontrak repository
-│   └── usecase/            # Business logic (SendMessageUseCase, IngestDocsUseCase, etc.)
-└── presentation/
-    ├── navigation/         # NavHost, Screen Routes, BottomBar Navigation
-    ├── home/               # HomeScreen, DashboardViewModel
-    ├── chat/               # ChatScreen, ChatViewModel, Bubble Components
-    ├── skin/               # SkinDiagnosisScreen, SkinLineageScreen, CameraView
-    ├── knowledge/          # KnowledgeBaseScreen, DocumentIndexingViewModel
-    ├── models/             # ModelManagerScreen (Download & SAF Tabs), ModelViewModel
-    ├── persona/            # PersonaConfigScreen, PersonaViewModel
-    └── tools/              # DrugInfoScreen, LabInterpreterScreen, ReminderScreen
-```
+Missing evidence is rendered as `UNAVAILABLE`, `INSUFFICIENT_DATA`, `MODEL_UNAVAILABLE`, or `EMBEDDER_UNAVAILABLE`. It is never converted into a fabricated answer.
 
----
+## 2. AntiSlop principles
 
-## 2. Model Acquisition & Storage Architecture
+### Content first
 
-MedBot mendukung strategi perolehan model ganda (*Dual-Mode Model Acquisition*):
-1. **Pemuatan Berkas Lokal via Storage Access Framework (SAF)**
-2. **Pengunduhan Model Resumable Langsung di Aplikasi (In-App Downloader)**
+Each screen has one dominant purpose and one primary action:
 
-```
-                               ┌─────────────────────────────┐
-                               │   Pilihan Akuisisi Model    │
-                               └──────────────┬──────────────┘
-                                              │
-                      ┌───────────────────────┴───────────────────────┐
-                      ▼                                               ▼
-        ┌───────────────────────────┐                   ┌───────────────────────────┐
-        │  1. Pemuatan Folder SAF   │                   │  2. In-App Model Download │
-        │ (ACTION_OPEN_DOCUMENT_TREE│                   │  (Tombol Unduh di App)    │
-        └─────────────┬─────────────┘                   └─────────────┬─────────────┘
-                      │                                               │
-                      ▼                                               ▼
-        ┌───────────────────────────┐                   ┌───────────────────────────┐
-        │ Simpan Persistable URI    │                   │ WorkManager Background Job│
-        │ Permission                │                   │ (OkHttp HTTP Range Header)│
-        └─────────────┬─────────────┘                   └─────────────┬─────────────┘
-                      │                                               │
-                      ▼                                               ▼
-        ┌───────────────────────────┐                   ┌───────────────────────────┐
-        │ Scan Model (.litertlm/    │                   │ Unduh ke .part -> Validasi│
-        │ .gguf) di Folder SAF      │                   │ Checksum SHA-256          │
-        └─────────────┬─────────────┘                   └─────────────┬─────────────┘
-                      │                                               │
-                      └───────────────────────┬───────────────────────┘
-                                              │
-                                              ▼
-                                ┌───────────────────────────┐
-                                │ Muat Model ke RAM Engine  │
-                                │ (LiteRT-LM / llama.cpp)   │
-                                └───────────────────────────┘
-```
+| Screen | Dominant purpose | Primary action |
+| --- | --- | --- |
+| Home | Understand local readiness | Start consultation |
+| Chat | Read and compose a consultation | Send a labelled question |
+| Skin Scan | Provide a real photo and metadata | Import/capture, then request analysis |
+| Skin Lineage | Review stored photo records | Select a record |
+| Knowledge Base | Add user-owned source material | Import a document through SAF |
+| Model Manager | Validate and load a local model | Choose a `.litertlm` file |
+| Persona | Configure response context | Save |
+| Medical Tools | Run a selected input-driven tool | Submit explicit inputs |
 
-### 2.1 Manajemen Model LLM via SAF
-1. **Pemilihan Folder**: Pengguna menunjuk folder di penyimpanan internal/SD card yang berisi berkas model (contoh: `gemma-4-e2b.litertlm` atau `gemma-2-2b.gguf`).
-2. **Pemberian Izin Persisten**:
-   ```kotlin
-   val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-   context.contentResolver.takePersistableUriPermission(folderUri, takeFlags)
-   ```
-3. **Pemuatan Berkas**: Engine C++/Native membaca berkas melalui *File Descriptor* (`ParcelFileDescriptor.open`) atau menyalin berkas ke cache *app-private* terenkripsi untuk inferensi dengan latensi terendah.
+Secondary actions remain visually subordinate. Quick access is a short list, not a feature grid.
 
-### 2.2 Arsitektur In-App Resumable Model Downloader (Online On-Demand)
-Untuk pengguna yang belum memiliki model di penyimpanan lokal, aplikasi menyediakan tombol unduh langsung (*one-tap download*) dengan arsitektur unduhan latar belakang yang tangguh:
+### Things intentionally excluded
 
-```
-[ Pengguna Menekan Tombol "Unduh" di Model Manager ]
-                        │
-                        ▼
-           [ ModelDownloadCoordinator ] ──► Validasi ruang penyimpanan bebas (> 2x ukuran model)
-                        │
-                        ▼
-           [ Android WorkManager ] ──► Menjadwalkan ResumableDownloadWorker (Constraints: Wi-Fi/Unmetered)
-                        │
-                        ▼
-           [ OkHttp Download Client ] ──► Mengirim HTTP Range Header ("Range: bytes=X-", "If-Range: etag")
-                        │
-                        ▼
-           [ Stream ke .part File ] ──► /files/models/downloads/gemma-4-e2b.litertlm.part
-                        │
-                        ▼
-           [ Verifikasi Checksum SHA-256 ] ──► Jika cocok, Rename Atomik -> gemma-4-e2b.litertlm
-                        │
-                        ▼
-           [ Update Status Model ] ──► READY_TO_LOAD / INSTALLED di Room DB & DataStore
-```
+- no decorative gradients, animated backgrounds, glassmorphism, floating blobs, or constant motion;
+- no nested cards, card-soup, dashboard tile grids, fake avatars, stock illustrations, or emoji as UI;
+- no `TextField.placeholder`; use label, supporting text, validation text, and an informative empty state;
+- no disabled button that looks unexplained: disabled state must have visible supporting context;
+- no numerical metric without a real source, timestamp, unit, and provenance;
+- no copy that says “AI ready” unless a validated local runtime is initialized.
 
-#### Struktur Manifest Model:
-```kotlin
-data class ModelManifest(
-    val id: String,
-    val displayName: String,
-    val version: String,
-    val format: ModelFormat, // LITERTLM, GGUF, ONNX
-    val downloadUrl: String,
-    val sizeBytes: Long,
-    val sha256: String,
-    val minimumRamMb: Int,
-    val isMultimodal: Boolean,
-    val recommendedBackend: String // "GPU", "CPU", "AUTO"
-)
+## 3. Material 3 Expressive foundation
 
-enum class ModelDownloadStatus {
-    NOT_DOWNLOADED,
-    DOWNLOADING,
-    PAUSED,
-    VERIFYING,
-    READY_TO_LOAD,
-    LOADED_IN_RAM,
-    ERROR
-}
-```
+The implementation uses Material 3 semantic roles rather than screen-specific colors. Expressive character comes from hierarchy, shape, typography, selected-state contrast, and purposeful motion—not decoration.
 
----
+### Tokens
 
-## 3. On-Device RAG & Vector Search Pipeline
+- spacing: `4 / 8 / 16 / 24 / 32 / 48dp`;
+- touch target: at least `48 × 48dp` for every interactive control;
+- radii: small `8dp`, medium `12dp`, large `20dp`; use the theme shape scale;
+- elevation: tonal surface and borders first; use minimal shadow elevation;
+- colors: `primary`, `onPrimary`, `primaryContainer`, `secondaryContainer`, `surface`, `surfaceVariant`, `outlineVariant`, `error`, and explicit urgency roles;
+- typography: `displaySmall`/`headline` for page intent, `title` for sections, `body` for evidence, `label` for metadata and controls;
+- icons: Material icons with content descriptions on meaningful controls; decorative icons use `null` only when adjacent text already conveys the same meaning.
 
-Pipeline RAG memungkinkan MedBot menjawab pertanyaan berbasis dokumen lokal (seperti Panduan Praktik Klinis Dokter, Buku Saku Obat, Panduan Kemenkes/WHO) tanpa koneksi internet.
+### Urgency and evidence roles
 
-```
-[ SAF Medical Document (PDF/TXT/MD) ]
-                │
-                ▼
-      [ Document Parser ] ──► (pdfbox-android / PlainTextParser)
-                │
-                ▼
-      [ Recursive Chunker ] ──► (512 token / chunk, overlap 50 token)
-                │
-                ▼
-     [ On-Device Embedder ] ──► (Gecko 110M / all-MiniLM-L6-v2 ONNX)
-                │
-                ▼
-      [ Room SQLite DB ] ──► (Table: doc_chunks dengan FLOAT/BLOB vector)
+Urgency colors are semantic and are never used to imply a diagnosis:
+
+- emergency: red;
+- high: orange;
+- medium: yellow/amber;
+- low: green only when a real policy result supports it;
+- insufficient data: slate/neutral.
+
+The `INSUFFICIENT_DATA` role is a first-class state, not an error hidden in a snackbar.
+
+## 4. Adaptive layout contract
+
+The root navigation owns the window insets. Child screens render content and do not create a second root `Scaffold`.
+
+| Width | Navigation | Content strategy |
+| ---: | --- | --- |
+| `< 600dp` | `NavigationBar` | One-column content-first flow |
+| `600–839dp` | `NavigationRail` | Constrained content with reflowed actions |
+| `>= 840dp` | `NavigationRail` | `ListDetailPaneScaffold` for list/detail workflows |
+
+The layout must be checked at 320, 360, 411, 600, and 840+ dp, in portrait and landscape, with normal and large font scale. A wide phone is not treated as a stretched phone layout.
+
+### Multi-pane screens
+
+Material Adaptive `ListDetailPaneScaffold` is used for:
+
+- Chat: session list and message detail;
+- Knowledge Base: document/search list and provenance detail;
+- Skin Lineage: record list and selected record detail.
+
+On compact windows the scaffold reflows to a single visible pane. Back navigation returns from detail to list before leaving the route. Selected keys are stable entity IDs, never list positions.
+
+### Edge-to-edge
+
+`MainActivity` calls `enableEdgeToEdge()`. The root `Scaffold` uses `ScaffoldDefaults.contentWindowInsets`. The top bar consumes only horizontal safe-drawing insets because the root owns vertical system-bar insets. Content uses the root padding and does not add manual zero-inset voids. Keyboard, cutout, gesture navigation, API 35, rotation, and landscape are acceptance cases.
+
+Material 3 is pinned to `1.4.0`. The current toolchain is AGP `8.8.2`/compile SDK `35`, so the project uses stable Material Adaptive `1.2.0`. Adaptive `1.3.0` is intentionally recorded as a compatibility blocker until the toolchain can satisfy its published AAR metadata requirements; alpha APIs are not used as a silent workaround.
+
+## 5. Motion and interaction
+
+Motion exists only to communicate feedback, state change, continuity, or hierarchy:
+
+- pressed controls use a short scale response connected to the actual pointer interaction source;
+- Material ripple communicates press;
+- haptic feedback is limited to meaningful actions and is not required for task completion;
+- loading, success, error, retry, cancellation, and disabled states are visible;
+- route and pane transitions are short and content-preserving;
+- no infinite animation or attention-seeking decoration;
+- reduced-motion users receive state changes without decorative animation.
+
+Every button, chip, tab, icon button, card-like list row, slider, picker, delete, save, retry, pause, resume, load, unload, search, and back action has a real handler or an explicit disabled reason.
+
+## 6. Screen contracts
+
+### Home
+
+Shows only measured local readiness: model loaded state, active model path when known, and document count from Room. It has one primary “Start consultation” action and secondary links to Model Manager, Knowledge Base, Skin, Tools, and Persona.
+
+### Chat
+
+The message stream is the visual focus. The composer has a persistent label and supporting safety text. Attachments are real user-selected files only. A photo is not sent into text-only LiteRT-LM; it produces `VISION_UNAVAILABLE` until a vision-capable local runtime is implemented. Citations are displayed only from stored document provenance.
+
+### Skin Scan and Skin Lineage
+
+Camera/gallery input is real and copied through a bounded app-private media gateway. The body location is explicit; no body location is silently selected. Invalid files, failed permission, missing metadata, and absent vision runtime produce `INSUFFICIENT_DATA` or `UNAVAILABLE`. No benign baseline, ABCD score, differential diagnosis, or urgency is persisted without a real validated vision model.
+
+### Knowledge Base
+
+Documents enter only through SAF. PDF uses a real PDF parser; TXT/MD and DOCX retain unknown page numbering when the format has no authoritative pages. SHA-256 is computed from the original bytes. Chunks retain document ID, section, page when authoritative, and provenance. Embedding failure is `EMBEDDER_UNAVAILABLE`; no hash-based pseudo-vector is allowed.
+
+### Model Manager
+
+The picker accepts `.litertlm`. A model is loaded only after readable file, extension, size, optional verified checksum, backend selection, and LiteRT-LM engine initialization succeed. The official registry is empty until a release-owned manifest supplies verified HTTPS URL, size, SHA-256, and source provenance. Download supports bounded resume, HTTP status validation, disk checks, measured speed, SHA-256, and atomic promotion.
+
+### Persona
+
+Language is limited to Bahasa Indonesia and English. Tone, depth, agent, patient profile, and custom instructions use explicit labels and are stored through the ViewModel/DataStore path. Auth and Hindi are outside the product boundary.
+
+### Medical Tools
+
+Inputs have no fabricated defaults. BMI and date arithmetic use only explicit values and are presented as calculations, not diagnoses. Pediatric Z-score and dosing remain unavailable without an official growth dataset and verified medication monographs. Lab comparison requires the reference range supplied by the actual report; hardcoded generic ranges are not used. Reminders persist only the time/title entered by the user.
+
+## 7. Architecture contract
+
+```text
+presentation/  Compose screens, immutable UI state, events, ViewModels
+domain/        pure policies, models, use cases, repository interfaces
+data/          Room/DataStore implementations, parsers, runtime adapters
+platform/      Android-specific permissions, SAF, media, and system gateways
+core/          Hilt graph and design system
 ```
 
-```
-[ User Medical Query ] ──► [ Embed Query ]
-                                  │
-                                  ▼
-                     [ Cosine Similarity Search ] ◄── [ Room DB ]
-                                  │
-                                  ▼
-                     [ Top-K Context Selection (3-5 Chunks) ]
-                                  │
-                                  ▼
-                     [ Augmented Prompt Generation ]
-                                  │
-                                  ▼
-                   [ Gemma LLM On-Device Inference ]
-                                  │
-                                  ▼
-                   [ Streaming Answer + Source Citations ]
-```
+Rules:
 
-### 3.1 Komputasi Vektor & Cosine Similarity
-Pencarian kesamaan semantik menggunakan rumus *Cosine Similarity*:
+- Compose renders state and emits events; it does not call DAOs, WorkManager, LiteRT-LM, or raw Android services directly;
+- ViewModels use `viewModelScope`, `StateFlow`, cancellation, and lifecycle-aware collection; they do not hold an Activity or View;
+- domain does not import data implementations;
+- data maps framework errors into typed domain failures;
+- Room migrations are explicit and destructive migration is not enabled;
+- no `runBlocking`, `GlobalScope`, `!!`, main-thread file/database work, empty catches, or silent infinite retry;
+- duplicated permission, validation, mapping, and navigation behavior belongs in one owner.
 
-$$\text{Cosine Similarity}(A, B) = \frac{A \cdot B}{\|A\| \|B\|} = \frac{\sum_{i=1}^n A_i B_i}{\sqrt{\sum_{i=1}^n A_i^2} \sqrt{\sum_{i=1}^n B_i^2}}$$
+## 8. State and evidence contract
 
-Pencarian dilakukan secara cepat menggunakan loop teroptimasi Kotlin / SIMD pada array float di memori, mendukung hingga puluhan ribu potongan dokumen (*chunks*) dengan waktu respons < 15ms.
+Every capability exposes an honest state. Typical states are `IDLE`, `RUNNING`, `AVAILABLE`, `UNAVAILABLE`, `INSUFFICIENT_DATA`, `PERMISSION_REQUIRED`, `MODEL_UNAVAILABLE`, `EMBEDDER_UNAVAILABLE`, `FAILED`, `STOPPED`, and `CANCELLED`.
 
----
+Test fixtures may exist in `src/test` or `src/androidTest`, but they do not seed production Room, ship in the APK, or become runtime success. Physical acceptance records device/API/permission/input/model provenance separately from static/build evidence.
 
-## 4. Pipeline Diagnosis Kulit & "Skin Lineage" (Linimasa Visual)
+## 9. Verification checklist
 
-Fitur Skin Lineage memberikan kemampuan diagnostik visual dan pemantauan perkembangan kondisi kulit pasien dari waktu ke waktu.
-
-```
-┌────────────────────────┐
-│  CameraX Capture /     │
-│  Photo Picker (SAF)    │
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ Preprocessing & Crop   │ ──► Penyimpanan lokal di app-private storage:
-│ (Normalisasi Citra)    │     /data/user/0/com.medbot.app/files/skin_images/
-└───────────┬────────────┘
-            │
-            ▼
-┌────────────────────────┐
-│ On-Device Vision Model │ ──► Multimodal Gemma / LiteRT Vision Model
-│ (Dermatology Analysis) │
-└───────────┬────────────┘
-            │
-            ├──────────────────────────────────────────────┐
-            ▼                                              ▼
-┌───────────────────────────────┐              ┌───────────────────────────────┐
-│   Evaluasi Kaidah ABCD        │              │  Klasifikasi Indikasi Awal    │
-│  - Asymmetry (A)              │              │  (Eksim, Psoriasis, Tinea,    │
-│  - Border Irregularity (B)    │              │   Dermatitis Kontak, dll.)    │
-│  - Color Variation (C)        │              │  + Penentuan Skor Urgensi     │
-│  - Diameter Estimation (D)    │              └───────────────┬───────────────┘
-└───────────────┬───────────────┘                              │
-                │                                              │
-                └──────────────────────┬───────────────────────┘
-                                       │
-                                       ▼
-                       ┌───────────────────────────────┐
-                       │  Simpan Entitas SkinRecord    │
-                       │     ke Basis Data Room        │
-                       └───────────────┬───────────────┘
-                                       │
-                                       ▼
-                       ┌───────────────────────────────┐
-                       │  Tampilan Skin Lineage UI     │
-                       │ (Linimasa + Slider Komparasi) │
-                       └───────────────────────────────┘
-```
-
-### 4.1 Skema Data Pelacakan Skin Lineage
-Setiap rekaman foto kulit dicatat dengan metadata lokasi tubuh, tanggal, skor ABCD, dan catatan gejala:
-* **Lokasi Tubuh**: Wajah, Leher, Lengan Kanan, Lengan Kiri, Punggung, Dada, Kaki, dll.
-* **Komparasi Visual**: Fitur *Interactive Split Slider* yang memungkinkan pasien membandingkan foto hari ke-1 dengan foto hari ke-7 untuk melihat apakah kemerahan/luas lesi berkurang.
-
----
-
-## 5. Skema Basis Data Room (Local SQLite)
-
-Aplikasi beroperasi sepenuhnya tanpa server autentikasi. Seluruh data disimpan dalam Room Database lokal bernama `medbot_local.db`.
-
-```
-┌───────────────────────┐          ┌───────────────────────┐
-│     chat_sessions     │ 1      * │     chat_messages     │
-├───────────────────────┤──────────├───────────────────────┤
-│ id: String (PK)       │          │ id: String (PK)       │
-│ title: String         │          │ sessionId: String(FK) │
-│ agentId: String       │          │ text: String          │
-│ createdAt: Long       │          │ isUser: Boolean       │
-│ updatedAt: Long       │          │ agentId: String       │
-└───────────────────────┘          │ citationsJson: String │
-                                   │ createdAt: Long       │
-                                   └───────────────────────┘
-
-┌───────────────────────┐          ┌───────────────────────┐
-│     rag_documents     │ 1      * │      doc_chunks       │
-├───────────────────────┤──────────├───────────────────────┤
-│ id: String (PK)       │          │ id: String (PK)       │
-│ fileName: String      │          │ docId: String (FK)    │
-│ fileUri: String       │          │ chunkIndex: Int       │
-│ pageCount: Int        │          │ textContent: String   │
-│ chunkCount: Int       │          │ pageNumber: Int       │
-│ sha256: String        │          │ sectionTitle: String  │
-│ indexedAt: Long       │          │ embeddingBlob: BLOB   │
-└───────────────────────┘          └───────────────────────┘
-
-┌───────────────────────┐          ┌───────────────────────┐
-│     skin_records      │          │       drugs_db        │
-├───────────────────────┤          ├───────────────────────┤
-│ id: String (PK)       │          │ name: String (PK)     │
-│ bodyPart: String      │          │ genericName: String   │
-│ imagePath: String     │          │ indication: String    │
-│ asymmetryScore: Float │          │ adultDose: String     │
-│ borderScore: Float    │          │ childDose: String     │
-│ colorScore: Float     │          │ contraindications: Str│
-│ diameterMm: Float     │          │ sideEffects: String   │
-│ differentialDx: String│          │ isOtc: Boolean        │
-│ urgencyLevel: String  │          └───────────────────────┘
-│ userNotes: String     │
-│ createdAt: Long       │
-└───────────────────────┘
-```
-
----
-
-## 6. UI/UX Design System (Material 3 & Jetpack Compose)
-
-Sistem antarmuka dirancang dengan estetika modern, ramah pengguna, berorientasi medis yang menenangkan, serta mendukung mode Gelap dan Terang secara dinamis.
-
-### 6.1 Palet Warna Klinis (Color Palette)
-* **Primary (Deep Medical Emerald)**: `#0D7C66` (Memberikan rasa aman, tenang, dan profesional)
-* **Primary Container (Soft Mint)**: `#D1F2EB` (Latar belakang elemen penting yang nyaman di mata)
-* **Secondary (Teal Accent)**: `#1DB589` (Aksen tombol interaktif dan badge spesialis)
-* **Background Light**: `#F8FBFB` | **Background Dark**: `#101817`
-* **Surface Light**: `#FFFFFF` | **Surface Dark**: `#182422`
-* **Urgency Alerts**:
-  - *Emergency / Red Flag*: `#E74C3C` (Merah Darurat)
-  - *Warning / Need Attention*: `#F39C12` (Kuning Perhatian)
-  - *Normal / Safe*: `#27AE60` (Hijau Aman)
-
-### 6.2 Tipografi (Typography Scale)
-Menggunakan keluarga huruf modern (Inter / Roboto) dengan hierarki yang jelas:
-* `HeadlineLarge` (24sp Bold): Judul layar utama & nama pasien
-* `TitleMedium` (16sp SemiBold): Judul kartu modul & nama spesialis
-* `BodyLarge` (15sp Regular): Teks gelembung percakapan medis
-* `LabelSmall` (11sp Medium): Lencana status model, sitasi halaman, timestamp
-
-### 6.3 Desain & Alur Layar Utama (Screen Flow)
-
-```
-                            ┌─────────────────────┐
-                            │     Splash Screen   │
-                            └──────────┬──────────┘
-                                       │
-                                       ▼
-                            ┌─────────────────────┐
-                            │     Main Navigation │
-                            │      Bottom Bar     │
-                            └──────────┬──────────┘
-           ┌─────────────────┬─────────┴─────────┬─────────────────┐
-           ▼                 ▼                   ▼                 ▼
-   ┌───────────────┐ ┌───────────────┐   ┌───────────────┐ ┌───────────────┐
-   │  HomeScreen   │ │  ChatScreen   │   │  SkinLineage  │ │  ToolsScreen  │
-   └───────┬───────┘ └───────┬───────┘   └───────┬───────┘ └───────┬───────┘
-           │                 │                   │                 │
-    [Status Model &   [Streaming Token,   [Camera Capture,  [Drug Search,
-     RAG Card, Quick   Markdown, Source    ABCD Evaluation,  Lab Test,
-     Triage, Persona]  Pills, Citations]   Timeline Slider]  Reminders]
-           │
-           ├───────────────────────────────┐
-           ▼                               ▼
-   ┌───────────────────────┐       ┌───────────────┐
-   │     ModelManager      │       │ KnowledgeBase │
-   │ (Downloader & SAF Tab)│       │ (SAF RAG Ingest│
-   └───────────────────────┘       └───────────────┘
-```
-
-#### Komponen Utama UI:
-1. **Status Banner Card**: Menampilkan status engine model AI (`Siap Digunakan • Gemma 4 E2B`, `Model Belum Dimuat`, atau `Sedang Inisialisasi`) beserta jumlah dokumen RAG yang terindeks.
-2. **Model Manager Screen (Dual-Tab)**:
-   - **Tab 1 — Unduh Model Online**: Menampilkan kartu model resmi (Gemma 4 E2B, Gemma 4 E4B, Gemma 2 2B, LiteRT Vision Bundle), tombol **Unduh** / **Jeda** / **Lanjut**, progress bar persentase unduhan, kecepatan unduh, dan tombol **Muat ke RAM**.
-   - **Tab 2 — Folder Lokal (SAF)**: Tombol pemilih folder perangkat (`ACTION_OPEN_DOCUMENT_TREE`), daftar berkas model lokal yang terdeteksi, dan tombol pemilihan model aktif.
-3. **Specialist Badge & Citation Chip**: Di setiap pesan AI, terdapat chip nama dokter spesialis (contoh: `🩺 Dr. Spesialis Kulit`) dan chip kutipan dokumen yang dapat diklik untuk membuka modal pembaca cuplikan sumber asli.
-4. **Interactive Skin Comparator Slider**: Komponen geser vertikal/horizontal yang membagi dua foto kulit untuk melihat perubahan lesi secara presisi.
-
----
-
-## 7. Penanganan Kinerja, Memori & Termal
-
-| Masalah Potensial | Solusi Arsitektural yang Diterapkan |
-| :--- | :--- |
-| **Peningkatan Suhu (Thermal Throttling)** | Membatasi alokasi *inference threads* menjadi maksimal 2–3 core dan menjalankan proses RAG secara asinkron di latar belakang (*background dispatchers*). |
-| **Out-of-Memory (OOM) pada Model 4B** | Memeriksa ketersediaan RAM perangkat (`ActivityManager.MemoryInfo`). Jika RAM bebas < 1.5 GB, aplikasi menampilkan rekomendasi penggunaan model 2B atau menurunkan panjang *context window*. |
-| **UI Recomposition Lag saat Streaming** | Menggunakan operator Flow `.sample(50.milliseconds)` pada emisi token untuk memperbarui UI setiap 50ms alih-alih pada setiap karakter tunggal. |
-| **Perubahan Lokasi File Asli SAF** | Setiap dokumen yang diimpor dari SAF langsung diproses dan diekstrak teksnya ke Room DB pada saat pertama kali dipilih, sehingga RAG tidak rusak jika file asli dipindahkan. |
+- [ ] UI text has Bahasa Indonesia and English resources.
+- [ ] No placeholder, mock, dummy, synthetic, canned, or fabricated production output.
+- [ ] All interactive controls have a handler, state, and accessible label.
+- [ ] Every target is at least 48dp and usable with large text.
+- [ ] Empty/loading/error/unavailable/permission states are visible.
+- [ ] Compact, medium, expanded, landscape, keyboard, and edge-to-edge layouts are checked.
+- [ ] Local model/RAG/vision results are blocked without real validated evidence.
+- [ ] `lintDebug`, unit tests, assembly, and connected tests are reported separately from physical-device acceptance.

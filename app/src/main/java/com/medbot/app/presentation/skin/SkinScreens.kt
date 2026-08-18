@@ -1,713 +1,366 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.medbot.app.presentation.skin
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
-import androidx.lifecycle.ViewModel
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
-import com.medbot.app.core.designsystem.components.MarkdownText
+import com.medbot.app.R
+import com.medbot.app.core.designsystem.components.AdaptiveContent
+import com.medbot.app.core.designsystem.components.AdaptiveFlowRow
+import com.medbot.app.core.designsystem.components.AdaptiveListDetail
+import com.medbot.app.core.designsystem.components.InteractiveSkinSplitComparator
+import com.medbot.app.core.designsystem.components.MedBotSpacing
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.UrgencyBadge
 import com.medbot.app.core.designsystem.components.springBounceClick
-import com.medbot.app.core.designsystem.theme.UrgencyEmergencyRed
-import com.medbot.app.core.designsystem.theme.UrgencyHighOrange
-import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
-import com.medbot.app.core.designsystem.theme.UrgencyMediumYellow
 import com.medbot.app.domain.model.SkinRecord
-import com.medbot.app.domain.model.UrgencyLevel
-import com.medbot.app.domain.repository.SkinRepository
-import com.medbot.app.domain.repository.SkinAnalysisException
-import com.medbot.app.domain.repository.SkinAnalysisStatus
-import com.medbot.app.domain.usecase.AnalyzeSkinUseCase
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
-import java.util.*
-import javax.inject.Inject
+import java.util.Date
+import java.util.Locale
 
-enum class SkinAnalysisUiStatus {
-    IDLE,
-    UNAVAILABLE,
-    INSUFFICIENT_DATA,
-    FAILED
-}
+private data class SkinBodyPartOption(val id: String, val labelRes: Int)
 
-data class SkinAnalysisUiState(
-    val status: SkinAnalysisUiStatus = SkinAnalysisUiStatus.IDLE,
-    val message: String? = null
-)
-
-@HiltViewModel
-class SkinViewModel @Inject constructor(
-    private val skinRepository: SkinRepository,
-    private val analyzeSkinUseCase: AnalyzeSkinUseCase
-) : ViewModel() {
-
-    val allRecords: StateFlow<List<SkinRecord>> = skinRepository.getAllRecords()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _selectedBodyPart = MutableStateFlow("Semua")
-    val selectedBodyPart: StateFlow<String> = _selectedBodyPart.asStateFlow()
-
-    private val _currentAnalysis = MutableStateFlow<SkinRecord?>(null)
-    val currentAnalysis: StateFlow<SkinRecord?> = _currentAnalysis.asStateFlow()
-
-    private val _isAnalyzing = MutableStateFlow(false)
-    val isAnalyzing: StateFlow<Boolean> = _isAnalyzing.asStateFlow()
-
-    private val _analysisState = MutableStateFlow(SkinAnalysisUiState())
-    val analysisState: StateFlow<SkinAnalysisUiState> = _analysisState.asStateFlow()
-
-    fun selectBodyPartFilter(bodyPart: String) {
-        _selectedBodyPart.value = bodyPart
-    }
-
-    fun analyzeAndSave(imagePath: String, bodyPart: String, userNotes: String) {
-        viewModelScope.launch {
-            _isAnalyzing.value = true
-            _analysisState.value = SkinAnalysisUiState()
-            try {
-                val record = analyzeSkinUseCase.execute(imagePath, bodyPart, userNotes)
-                _currentAnalysis.value = record
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: SkinAnalysisException) {
-                _analysisState.value = SkinAnalysisUiState(
-                    status = when (e.status) {
-                        SkinAnalysisStatus.UNAVAILABLE -> SkinAnalysisUiStatus.UNAVAILABLE
-                        SkinAnalysisStatus.INSUFFICIENT_DATA -> SkinAnalysisUiStatus.INSUFFICIENT_DATA
-                    },
-                    message = e.message
-                )
-            } catch (e: Exception) {
-                _analysisState.value = SkinAnalysisUiState(
-                    status = SkinAnalysisUiStatus.FAILED,
-                    message = e.message ?: "Analisis lokal gagal dijalankan."
-                )
-            } finally {
-                _isAnalyzing.value = false
-            }
-        }
-    }
-
-    fun deleteRecord(id: String) {
-        viewModelScope.launch {
-            skinRepository.deleteRecord(id)
-        }
-    }
-
-    fun clearCurrentAnalysis() {
-        _currentAnalysis.value = null
-    }
-
-    fun clearAnalysisState() {
-        _analysisState.value = SkinAnalysisUiState()
-    }
-
-}
-
-val BODY_PARTS = listOf(
-    "Semua", "Wajah", "Leher", "Dada", "Punggung", "Lengan Kiri", "Lengan Kanan", "Tangan", "Tungkai", "Kaki"
+private val BODY_PARTS = listOf(
+    SkinBodyPartOption("all", R.string.body_part_all),
+    SkinBodyPartOption("face", R.string.body_part_face),
+    SkinBodyPartOption("neck", R.string.body_part_neck),
+    SkinBodyPartOption("chest", R.string.body_part_chest),
+    SkinBodyPartOption("back", R.string.body_part_back),
+    SkinBodyPartOption("left_arm", R.string.body_part_left_arm),
+    SkinBodyPartOption("right_arm", R.string.body_part_right_arm),
+    SkinBodyPartOption("hand", R.string.body_part_hand),
+    SkinBodyPartOption("leg", R.string.body_part_leg),
+    SkinBodyPartOption("foot", R.string.body_part_foot)
 )
 
 @Composable
-fun SkinScanScreen(
-    viewModel: SkinViewModel,
-    onNavigateBack: () -> Unit,
-    onNavigateToLineage: () -> Unit
-) {
+fun SkinScanScreen(viewModel: SkinViewModel, onNavigateBack: () -> Unit, onNavigateToLineage: () -> Unit) {
     val context = LocalContext.current
-    var selectedPart by remember { mutableStateOf("Wajah") }
-    var notes by remember { mutableStateOf("") }
-    var capturedImagePath by remember { mutableStateOf<String?>(null) }
-    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
-
+    var selectedPart by rememberSaveable { mutableStateOf("") }
+    var notes by rememberSaveable { mutableStateOf("") }
+    val imagePath by viewModel.selectedImagePath.collectAsStateWithLifecycle()
+    val captureTarget by viewModel.captureTarget.collectAsStateWithLifecycle()
+    val isImporting by viewModel.isImporting.collectAsStateWithLifecycle()
     val currentAnalysis by viewModel.currentAnalysis.collectAsStateWithLifecycle()
     val isAnalyzing by viewModel.isAnalyzing.collectAsStateWithLifecycle()
     val analysisState by viewModel.analysisState.collectAsStateWithLifecycle()
 
-    // Camera Capture Launcher
-    val takePictureLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success && tempCameraUri != null) {
-            // Picture captured
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        viewModel.onEvent(SkinUiEvent.CameraResult(success))
+    }
+    val requestCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.onEvent(SkinUiEvent.PrepareCameraCapture)
+    }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.onEvent(SkinUiEvent.ImportImage(uri.toString()))
+    }
+
+    LaunchedEffect(captureTarget) {
+        captureTarget?.let { takePicture.launch(Uri.parse(it.uri)) }
+    }
+
+    fun launchCamera() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            viewModel.onEvent(SkinUiEvent.PrepareCameraCapture)
+        } else {
+            requestCamera.launch(Manifest.permission.CAMERA)
         }
     }
 
-    // Gallery Picker Launcher
-    val pickImageLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            val lineageDir = File(context.filesDir, "skin_lineage").apply { if (!exists()) mkdirs() }
-            val destFile = File(lineageDir, "skin_${System.currentTimeMillis()}.jpg")
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            capturedImagePath = destFile.absolutePath
-            viewModel.clearAnalysisState()
-        }
-    }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            MedBotTopAppBar(
-                title = "Skin Lineage & Diagnosis",
-                subtitle = "Pemeriksaan Lesi Kulit Berbasis Kaidah ABCD",
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+    Column {
+        MedBotTopAppBar(
+            title = stringResource(R.string.skin_title),
+            subtitle = stringResource(R.string.skin_subtitle),
+            navigationIcon = { IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+            actions = { IconButton(onClick = onNavigateToLineage, modifier = Modifier.springBounceClick()) { Icon(Icons.Filled.Timeline, contentDescription = stringResource(R.string.skin_lineage)) } }
+        )
+        AdaptiveContent(modifier = Modifier.weight(1f), maxContentWidth = 840.dp) {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = MedBotSpacing.medium, vertical = MedBotSpacing.medium),
+                verticalArrangement = Arrangement.spacedBy(MedBotSpacing.large)
+            ) {
+                if (analysisState.status != SkinAnalysisUiStatus.IDLE) {
+                    item {
+                        Surface(color = if (analysisState.status == SkinAnalysisUiStatus.FAILED) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(MedBotSpacing.medium)) {
+                                Text(
+                                    text = when (analysisState.status) {
+                                        SkinAnalysisUiStatus.UNAVAILABLE -> stringResource(R.string.skin_unavailable)
+                                        SkinAnalysisUiStatus.INSUFFICIENT_DATA -> stringResource(R.string.skin_insufficient_data)
+                                        SkinAnalysisUiStatus.FAILED -> stringResource(R.string.skin_failed_generic)
+                                        SkinAnalysisUiStatus.IDLE -> ""
+                                    },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = when (analysisState.reason) {
+                                        SkinAnalysisReason.MODEL_UNAVAILABLE -> stringResource(R.string.skin_reason_model)
+                                        SkinAnalysisReason.INPUT_REQUIRED -> stringResource(R.string.skin_reason_input)
+                                        SkinAnalysisReason.FAILED -> stringResource(R.string.skin_reason_failed)
+                                        null -> ""
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(top = MedBotSpacing.small)
+                                )
+                            }
+                        }
                     }
-                },
-                actions = {
-                    TextButton(onClick = onNavigateToLineage, modifier = Modifier.springBounceClick()) {
-                        Text("Linimasa ›", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                    }
                 }
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
-        ) {
-            val analysisMessage = analysisState.message
-            if (analysisState.status != SkinAnalysisUiStatus.IDLE && analysisMessage != null) {
                 item {
-                    Surface(
-                        color = if (analysisState.status == SkinAnalysisUiStatus.UNAVAILABLE ||
-                            analysisState.status == SkinAnalysisUiStatus.INSUFFICIENT_DATA
-                        ) {
-                            MaterialTheme.colorScheme.secondaryContainer
+                    val bitmap = rememberBitmap(imagePath)
+                    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth().height(240.dp)) {
+                        if (bitmap != null) {
+                            Image(bitmap = bitmap.asImageBitmap(), contentDescription = stringResource(R.string.skin_photo_description), contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(240.dp).clip(MaterialTheme.shapes.large))
                         } else {
-                            MaterialTheme.colorScheme.errorContainer
-                        },
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth()
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth().padding(MedBotSpacing.large)) {
+                                Icon(Icons.Filled.CameraAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                                Text(stringResource(R.string.skin_photo_heading), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = MedBotSpacing.small))
+                                Text(stringResource(R.string.skin_photo_support), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = MedBotSpacing.xSmall))
+                            }
+                        }
+                    }
+                    AdaptiveFlowRow(modifier = Modifier.fillMaxWidth().padding(top = MedBotSpacing.small)) {
+                        Button(onClick = ::launchCamera, enabled = !isImporting, modifier = Modifier.springBounceClick()) { Icon(Icons.Filled.PhotoCamera, contentDescription = null); Spacer(modifier = Modifier.width(MedBotSpacing.small)); Text(stringResource(R.string.skin_camera)) }
+                        OutlinedButton(onClick = { pickImage.launch("image/*") }, enabled = !isImporting, modifier = Modifier.springBounceClick()) { Icon(Icons.Filled.PhotoLibrary, contentDescription = null); Spacer(modifier = Modifier.width(MedBotSpacing.small)); Text(stringResource(R.string.skin_gallery)) }
+                        if (isImporting) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    }
+                }
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
+                        Text(stringResource(R.string.skin_body_part), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.skin_body_part_required), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        AdaptiveFlowRow {
+                            BODY_PARTS.drop(1).forEach { part ->
+                                FilterChip(
+                                    selected = selectedPart == part.id,
+                                    onClick = { selectedPart = part.id },
+                                    label = { Text(stringResource(part.labelRes)) },
+                                    modifier = Modifier.springBounceClick()
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(stringResource(R.string.skin_notes_label)) }, supportingText = { Text(stringResource(R.string.skin_notes_support)) }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+                }
+                item {
+                    Button(
+                         onClick = { viewModel.onEvent(SkinUiEvent.Analyze(selectedPart, notes)) },
+                        enabled = imagePath != null && selectedPart.isNotBlank() && !isAnalyzing && !isImporting,
+                        modifier = Modifier.fillMaxWidth().springBounceClick(),
+                        contentPadding = PaddingValues(vertical = MedBotSpacing.medium)
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = when (analysisState.status) {
-                                    SkinAnalysisUiStatus.UNAVAILABLE -> "Analisis kulit belum tersedia"
-                                    SkinAnalysisUiStatus.INSUFFICIENT_DATA -> "Data foto belum cukup"
-                                    SkinAnalysisUiStatus.FAILED -> "Analisis kulit gagal"
-                                    SkinAnalysisUiStatus.IDLE -> ""
-                                },
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = analysisMessage, style = MaterialTheme.typography.bodySmall)
-                            if (analysisState.status == SkinAnalysisUiStatus.UNAVAILABLE) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Tidak ada diagnosis atau data klinis yang dibuat tanpa model vision lokal.",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                        }
+                        if (isAnalyzing) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp) else Icon(Icons.Filled.Analytics, contentDescription = null)
+                        Spacer(modifier = Modifier.width(MedBotSpacing.small))
+                        Text(if (isAnalyzing) stringResource(R.string.skin_analyzing) else stringResource(R.string.skin_analyze))
                     }
                 }
-            }
-
-            // Photo View / Capture Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth().height(240.dp)
-                ) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        val imagePath = capturedImagePath
-                        if (imagePath != null && File(imagePath).exists()) {
-                            val bitmap = remember(imagePath) {
-                                BitmapFactory.decodeFile(imagePath)
-                            }
-                            if (bitmap != null) {
-                                Image(
-                                    bitmap = bitmap.asImageBitmap(),
-                                    contentDescription = "Foto Lesi Kulit",
-                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp))
-                                )
-                            }
-                        } else {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(16.dp)
-                            ) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    shape = CircleShape,
-                                    modifier = Modifier.size(64.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.CameraAlt,
-                                            contentDescription = "Kamera",
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(32.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "Ambil atau Unggah Foto Lesi Kulit",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                                Text(
-                                    text = "Pastikan foto memiliki pencahayaan cukup dan fokus tajam",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Button(
-                                        onClick = {
-                                            val lineageDir = File(context.filesDir, "skin_lineage").apply { if (!exists()) mkdirs() }
-                                            val photoFile = File(lineageDir, "skin_${System.currentTimeMillis()}.jpg")
-                                            capturedImagePath = photoFile.absolutePath
-                                            viewModel.clearAnalysisState()
-                                            try {
-                                                val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", photoFile)
-                                                tempCameraUri = uri
-                                                takePictureLauncher.launch(uri)
-                                            } catch (e: Exception) {
-                                                pickImageLauncher.launch("image/*")
-                                            }
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier.springBounceClick()
-                                    ) {
-                                        Icon(Icons.Default.PhotoCamera, contentDescription = "Kamera")
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Kamera")
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = { pickImageLauncher.launch("image/*") },
-                                        shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier.springBounceClick()
-                                    ) {
-                                        Icon(Icons.Default.PhotoLibrary, contentDescription = "Galeri")
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Pilih Galeri")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Body Part Chips
-            item {
-                Text("Bagian Tubuh Terkait", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(BODY_PARTS.drop(1)) { part ->
-                        FilterChip(
-                            selected = selectedPart == part,
-                            onClick = { selectedPart = part },
-                            label = { Text(part) },
-                            modifier = Modifier.springBounceClick()
-                        )
-                    }
-                }
-            }
-
-            // User Notes
-            item {
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("Deskripsi Gejala") },
-                    placeholder = { Text("Contoh: terasa gatal, kemerahan, muncul sejak 3 hari...") },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
-            }
-
-            // Action Button
-            item {
-                Button(
-                    onClick = {
-                        capturedImagePath?.let { path ->
-                            viewModel.analyzeAndSave(path, selectedPart, notes)
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .springBounceClick(),
-                    shape = RoundedCornerShape(14.dp),
-                    enabled = !isAnalyzing && capturedImagePath != null
-                ) {
-                    if (isAnalyzing) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Menganalisis Kaidah ABCD...")
-                    } else if (capturedImagePath == null) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = "Ambil Foto Dulu")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ambil / Pilih Foto Terlebih Dahulu")
-                    } else {
-                        Icon(Icons.Default.Analytics, contentDescription = "Diagnosa")
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Diagnosa Kaidah ABCD & Simpan")
-                    }
-                }
-            }
-
-            // Diagnostic Result Card
-            currentAnalysis?.let { record ->
-                item {
-                    SkinResultCard(record = record)
-                }
+                currentAnalysis?.let { record -> item { SkinResultCard(record) } }
             }
         }
     }
 }
 
 @Composable
-fun SkinLineageScreen(
-    viewModel: SkinViewModel,
-    onNavigateBack: () -> Unit,
-    onNavigateToScan: () -> Unit
-) {
+fun SkinLineageScreen(viewModel: SkinViewModel, onNavigateBack: () -> Unit, onNavigateToScan: () -> Unit) {
     val records by viewModel.allRecords.collectAsStateWithLifecycle()
     val selectedPart by viewModel.selectedBodyPart.collectAsStateWithLifecycle()
-
-    val filteredRecords = remember(records, selectedPart) {
-        if (selectedPart == "Semua") records else records.filter { it.bodyPart == selectedPart }
-    }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            MedBotTopAppBar(
-                title = "Linimasa Kulit (Skin Lineage)",
-                subtitle = "Pantau Perkembangan Lesi Kulit Anda",
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+    val filtered = remember(records, selectedPart) { if (selectedPart == "all") records else records.filter { it.bodyPart == selectedPart } }
+    var selectedRecordId by remember { mutableStateOf<String?>(null) }
+    val selectedRecord = filtered.firstOrNull { it.id == selectedRecordId }
+    val isSinglePane = LocalConfiguration.current.screenWidthDp < 840
+    Column {
+        MedBotTopAppBar(
+            title = stringResource(R.string.skin_lineage_title),
+            subtitle = stringResource(R.string.skin_lineage_subtitle),
+             navigationIcon = { IconButton(onClick = { if (isSinglePane && selectedRecordId != null) selectedRecordId = null else onNavigateBack() }, modifier = Modifier.springBounceClick()) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back)) } },
+            actions = { IconButton(onClick = onNavigateToScan, modifier = Modifier.springBounceClick()) { Icon(Icons.Filled.PhotoCamera, contentDescription = stringResource(R.string.skin_new_photo)) } }
+        )
+        AdaptiveContent(modifier = Modifier.weight(1f), maxContentWidth = 1_040.dp) {
+            AdaptiveListDetail(
+                modifier = Modifier.fillMaxWidth(),
+                 selectedKey = selectedRecordId,
+                 onBackFromDetail = { selectedRecordId = null },
+                listPane = {
+                    LazyColumn(contentPadding = PaddingValues(MedBotSpacing.medium), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
+                        item {
+                            AdaptiveFlowRow {
+                                BODY_PARTS.forEach { part ->
+                                    FilterChip(
+                                        selected = selectedPart == part.id,
+                                         onClick = { viewModel.onEvent(SkinUiEvent.SelectBodyPartFilter(part.id)) },
+                                        label = { Text(stringResource(part.labelRes)) },
+                                        modifier = Modifier.springBounceClick()
+                                    )
+                                }
+                            }
+                        }
+                        if (filtered.isEmpty()) {
+                            item {
+                                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                                    Column(modifier = Modifier.padding(MedBotSpacing.large), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(stringResource(R.string.skin_no_records), style = MaterialTheme.typography.titleMedium)
+                                        Text(stringResource(R.string.skin_no_records_support), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = MedBotSpacing.small))
+                                        Button(onClick = onNavigateToScan, modifier = Modifier.padding(top = MedBotSpacing.medium).springBounceClick()) { Text(stringResource(R.string.skin_new_photo)) }
+                                    }
+                                }
+                            }
+                        } else {
+                            if (filtered.size >= 2) {
+                                item {
+                                    val before = filtered.last()
+                                    val after = filtered.first()
+                                    InteractiveSkinSplitComparator(
+                                        beforeBitmap = rememberBitmap(before.imagePath),
+                                        afterBitmap = rememberBitmap(after.imagePath),
+                                        beforeLabel = stringResource(R.string.skin_before),
+                                        afterLabel = stringResource(R.string.skin_latest)
+                                    )
+                                }
+                            }
+                            items(filtered, key = { it.id }) { record ->
+                                SkinLineageTimelineItem(
+                                    record = record,
+                                    onClick = { selectedRecordId = record.id },
+                                    onDelete = {
+                                        if (selectedRecordId == record.id) selectedRecordId = null
+                                         viewModel.onEvent(SkinUiEvent.DeleteRecord(record.id))
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
-                actions = {
-                    IconButton(onClick = onNavigateToScan, modifier = Modifier.springBounceClick()) {
-                        Icon(Icons.Default.AddAPhoto, contentDescription = "Foto Baru", tint = MaterialTheme.colorScheme.primary)
+                detailPane = {
+                    if (selectedRecord == null) {
+                        Surface(modifier = Modifier.fillMaxSize().padding(MedBotSpacing.medium), color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.large) {
+                            Column(modifier = Modifier.padding(MedBotSpacing.large), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
+                                Text(stringResource(R.string.skin_detail_empty_title), style = MaterialTheme.typography.titleLarge)
+                                Text(stringResource(R.string.skin_detail_empty_support), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    } else {
+                        LazyColumn(contentPadding = PaddingValues(MedBotSpacing.medium)) { item { SkinResultCard(selectedRecord) } }
                     }
                 }
             )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Filter Bar
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(BODY_PARTS) { part ->
-                    FilterChip(
-                        selected = selectedPart == part,
-                        onClick = { viewModel.selectBodyPartFilter(part) },
-                        label = { Text(part) },
-                        modifier = Modifier.springBounceClick()
-                    )
-                }
-            }
-
-            if (filteredRecords.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = CircleShape,
-                            modifier = Modifier.size(80.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("🧴", fontSize = 40.sp)
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Belum Ada Riwayat Foto Kulit",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "Ambil foto lesi kulit Anda untuk mencatat linimasa perkembangan.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(18.dp))
-                        Button(
-                            onClick = onNavigateToScan,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.springBounceClick()
-                        ) {
-                            Text("Ambil Foto Sekarang")
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    // If multiple records exist, show Split Comparator on Top
-                    if (filteredRecords.size >= 2) {
-                        item {
-                            val oldest = filteredRecords.last()
-                            val newest = filteredRecords.first()
-                            val beforeBitmap = remember(oldest.imagePath) {
-                                if (File(oldest.imagePath).exists()) BitmapFactory.decodeFile(oldest.imagePath) else null
-                            }
-                            val afterBitmap = remember(newest.imagePath) {
-                                if (File(newest.imagePath).exists()) BitmapFactory.decodeFile(newest.imagePath) else null
-                            }
-
-                            com.medbot.app.core.designsystem.components.InteractiveSkinSplitComparator(
-                                beforeBitmap = beforeBitmap,
-                                afterBitmap = afterBitmap,
-                                beforeLabel = "Awal (${oldest.bodyPart})",
-                                afterLabel = "Terbaru (${newest.bodyPart})"
-                            )
-                        }
-                    }
-
-                    items(filteredRecords) { record ->
-                        SkinLineageTimelineItem(record = record, onDelete = { viewModel.deleteRecord(record.id) })
-                    }
-                }
-            }
         }
     }
 }
 
 @Composable
 fun SkinResultCard(record: SkinRecord) {
-    val animatedRisk by animateFloatAsState(
-        targetValue = record.abcdEvaluation.totalRiskScore / 10f,
-        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-        label = "riskProgress"
-    )
-
-    val riskColor = when {
-        record.abcdEvaluation.totalRiskScore >= 6.5f -> UrgencyEmergencyRed
-        record.abcdEvaluation.totalRiskScore >= 4.0f -> UrgencyMediumYellow
-        else -> UrgencyLowGreen
-    }
-
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth().animateContentSize()
-    ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Hasil Evaluasi: ${record.bodyPart}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-                UrgencyBadge(urgency = record.urgencyLevel)
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Animated ABCD Risk Meter
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Skor Risiko Keganasan ABCD",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = "${"%.1f".format(record.abcdEvaluation.totalRiskScore)} / 10.0 (${record.abcdEvaluation.riskClassification})",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = riskColor
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { animatedRisk },
-                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
-                    color = riskColor,
-                    trackColor = riskColor.copy(alpha = 0.2f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // ABCD Details Breakdown
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "Karakteristik Morfologi ABCD:",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    AbcdRow("A - Asimetri", record.abcdEvaluation.asymmetryDescription)
-                    AbcdRow("B - Batas Tepi (Border)", record.abcdEvaluation.borderDescription)
-                    AbcdRow("C - Variasi Warna (Color)", record.abcdEvaluation.colorDescription)
-                    AbcdRow("D - Diameter", record.abcdEvaluation.diameterDescription)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Text("Diagnosis Banding Klinis:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-            record.differentialDiagnoses.forEach { dx ->
-                Text("• $dx", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(record.clinicalSummary, style = MaterialTheme.typography.bodySmall)
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Langkah Perawatan Mandiri & Rujukan:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-            record.homeCareAdvice.forEach { adv ->
-                Text("✓ $adv", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+    Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(MedBotSpacing.medium), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
+            Row(verticalAlignment = Alignment.CenterVertically) { Text(stringResource(R.string.skin_result_heading, skinBodyPartLabel(record.bodyPart)), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f)); UrgencyBadge(record.urgencyLevel) }
+            Text(stringResource(R.string.skin_risk_score, record.abcdEvaluation.totalRiskScore, record.abcdEvaluation.riskClassification), style = MaterialTheme.typography.bodyMedium)
+            Text(record.clinicalSummary, style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.skin_differential), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            record.differentialDiagnoses.forEach { diagnosis -> Text("• $diagnosis", style = MaterialTheme.typography.bodySmall) }
+            Text(stringResource(R.string.skin_advice), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            record.homeCareAdvice.forEach { advice -> Text("• $advice", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
 
 @Composable
-fun AbcdRow(label: String, desc: String) {
-    Row(modifier = Modifier.padding(vertical = 3.dp)) {
-        Text(text = "$label: ", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-        Text(text = desc, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+fun SkinLineageTimelineItem(record: SkinRecord, onClick: () -> Unit = {}, onDelete: () -> Unit) {
+    val date = remember(record.createdAt) { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(record.createdAt)) }
+    Surface(color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium, border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).springBounceClick()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(MedBotSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.xSmall)) {
+                Text(skinBodyPartLabel(record.bodyPart), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(date, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.skin_risk_score, record.abcdEvaluation.totalRiskScore, record.abcdEvaluation.riskClassification), style = MaterialTheme.typography.bodySmall)
+                if (record.userNotes.isNotBlank()) Text(record.userNotes, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            UrgencyBadge(record.urgencyLevel)
+            IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) { Icon(Icons.Filled.DeleteOutline, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error) }
+        }
     }
 }
 
 @Composable
-fun SkinLineageTimelineItem(record: SkinRecord, onDelete: () -> Unit) {
-    val dateStr = remember(record.createdAt) {
-        val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID"))
-        sdf.format(Date(record.createdAt))
-    }
-
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth().springBounceClick()
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🗓️", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = dateStr, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
-                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Lokasi: ${record.bodyPart}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                UrgencyBadge(urgency = record.urgencyLevel)
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Skor ABCD: ${"%.1f".format(record.abcdEvaluation.totalRiskScore)}/10.0 • ${record.abcdEvaluation.riskClassification}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (record.userNotes.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Catatan: \"${record.userNotes}\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+private fun rememberBitmap(path: String?): Bitmap? {
+    val state by produceState<Bitmap?>(initialValue = null, key1 = path) {
+        value = path?.let { filePath ->
+            withContext(Dispatchers.IO) {
+                File(filePath).takeIf { it.exists() }?.let { file -> BitmapFactory.decodeFile(file.absolutePath) }
             }
         }
     }
+    return state
+}
+
+@Composable
+private fun skinBodyPartLabel(id: String): String {
+    val option = BODY_PARTS.firstOrNull { it.id == id }
+    return option?.let { stringResource(it.labelRes) } ?: id
 }

@@ -4,6 +4,7 @@ enum class ToolResultStatus {
     SUCCESS,
     VALIDATION_ERROR,
     INSUFFICIENT_DATA,
+    UNAVAILABLE,
     FAILED
 }
 

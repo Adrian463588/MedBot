@@ -69,16 +69,18 @@ Spesialis terpilih memproses kueri dengan panduan *System Prompt* spesifik dan d
 ### 1.4 Tahap 4: Markdown Formatting & Citations
 Menyatukan respons multi-spesialis ke dalam format Markdown terstruktur yang bersih, menyertakan lencana spesialis, tingkat urgensi, serta rekomendasi langkah selanjutnya (*actionable bullet points*).
 
-### 1.5 Distribusi Bundle Model untuk Agen (Dual-Mode: SAF & In-App Downloader)
-Seluruh 46 agen spesialis beroperasi di atas bundel model AI lokal yang dapat diperoleh melalui dua metode:
-1. **Pemuatan Folder SAF Lokal**: Menggunakan model yang sudah ada di penyimpanan perangkat melalui Android SAF.
-2. **In-App Resumable Model Downloader**: Mengunduh bundel model langsung dari repo resmi (HuggingFace / CDN) via tombol unduh di layar *Model Manager*.
+### 1.5 Distribusi Bundle Model dengan Evidence Gate
+Seluruh 46 agen spesialis menggunakan runtime lokal hanya setelah asset nyata
+melewati evidence gate. Model dapat dipilih pengguna melalui SAF atau diunduh
+melalui `WorkManager` ketika manifest resmi menyediakan URL HTTPS, ukuran,
+SHA-256, backend, dan provenance yang dapat diverifikasi. Tidak ada model name,
+URL, ukuran, checksum, corpus, atau output klinis yang boleh ditebak di source.
 
-| Kategori Bundle | Model yang Didukung | Kebutuhan Agen Spesialis |
-| :--- | :--- | :--- |
-| **Base Clinical LLM Bundle** | `Gemma 4 E2B` (~2.5 GB) / `Gemma 4 E4B` (~3.6 GB) / `Gemma 2 2B` (~1.5 GB) | Triase orchestrator & seluruh 46 agen teks |
-| **Multimodal Vision Bundle** | `LiteRT-Vision` / `MedSigLIP` / `Gemma 4 Multimodal` | Spesialis Kulit (Skin Lineage), Radiologi, Mata, Lab |
-| **RAG Embedder Bundle** | `Gecko 110M Quantized` / `all-MiniLM-L6-v2 ONNX` (~23 MB) | Penarikan dokumen pengetahuan lokal klinis |
+Format production yang diterima saat ini hanya `.litertlm`. Sampai runtime dan
+manifest release-owned benar-benar tersedia, registry tetap kosong dan UI
+menampilkan `MODEL_UNAVAILABLE`. Vision dan embedder mengikuti batas yang sama:
+file yang valid saja tidak cukup untuk mengklaim hasil; engine harus benar-benar
+terinisialisasi. Tidak ada cloud fallback.
 
 ---
 
@@ -215,7 +217,7 @@ Setiap agen memiliki peran spesifik, prompt sistem terkurasi, ikon, ketersediaan
   Aturan:
   1. Selalu tanyakan usia persis dan berat badan anak untuk menentukan takaran obat.
   2. Gunakan perkakas calculate_zscore untuk mendeteksi malnutrisi/stunting.
-  3. Waspadai tanda bahaya: napas cepat (WHO rate), kejang, anak sangat lemas tidak mau minum, ubun-ubun cekung.
+  3. Waspadai tanda bahaya sesuai policy red-flag tervalidasi yang tersedia; bila input atau policy tidak lengkap, jangan menurunkan urgensi menjadi rendah.
   4. Berikan instruksi yang menenangkan dan mudah dimengerti orang tua/pengasuh.
   ```
 
@@ -346,7 +348,12 @@ Setiap agen memiliki peran spesifik, prompt sistem terkurasi, ikon, ketersediaan
 
 ## 3. Deterministic Local Medical Tools
 
-Perkakas lokal dijalankan langsung dengan logika deterministik Kotlin di perangkat, menghasilkan data akurat 100% tanpa risiko halusinasi angka dari LLM.
+Perkakas lokal dijalankan langsung dengan logika deterministik Kotlin di
+perangkat. Deterministik tidak berarti diagnosis atau kebenaran klinis; setiap
+tool membutuhkan input eksplisit dan sumber tervalidasi. Jika dataset,
+monograf, rentang laporan, atau runtime yang diwajibkan belum tersedia, tool
+wajib mengembalikan `UNAVAILABLE`/`INSUFFICIENT_DATA` dan tidak boleh mengarang
+angka, catalog, atau rekomendasi.
 
 ```kotlin
 interface LocalMedicalTool {
@@ -358,13 +365,13 @@ interface LocalMedicalTool {
 
 | Nama Perkakas | Parameter Masukan | Fungsi & Nilai Balikan |
 | :--- | :--- | :--- |
-| `assess_urgency` | `symptoms: List<String>, vitals: Map` | Menghitung skor triase (Low/Medium/High/Emergency) berdasarkan tanda bahaya klinis. |
-| `calculate_zscore` | `ageMonths: Int, weightKg: Double, heightCm: Double, gender: String` | Menghitung Z-Score WHO untuk mendeteksi gizi kurang, stunting, atau gizi lebih. |
-| `get_paediatric_dosing` | `drugName: String, weightKg: Double, indication: String` | Menghitung dosis mg/kgBB dan volume sirup (ml) yang aman berdasarkan formularium anak. |
-| `check_drug_interaction` | `drugList: List<String>` | Menelusuri matriks interaksi obat di database Room (Kategori Mayor, Moderat, Minor). |
-| `interpret_lab_result` | `testName: String, value: Double, unit: String` | Membandingkan nilai dengan rentang normal standar laboratorium dan memberikan status (Normal/Tinggi/Rendah). |
-| `evaluate_skin_abcd` | `asymmetry: Boolean, borderIrregular: Boolean, colorVariegated: Boolean, diameterMm: Double` | Menghitung skor risiko keganasan lesi kulit berdasarkan panduan dermatologi internasional. |
-| `search_skin_remedy` | `conditionKeywords: String` | Mengambil panduan penanganan awal dan krim topikal OTC dari database lokal. |
+| `assess_urgency` | `symptoms: List<String>, vitals: Map` | Menerapkan red-flag policy; gejala tidak lengkap menghasilkan `INSUFFICIENT_DATA`, bukan urgensi rendah. |
+| `calculate_zscore` | `ageMonths: Int, weightKg: Double, heightCm: Double, gender: String` | Memerlukan dataset pertumbuhan resmi yang benar-benar tersedia; tanpa itu `UNAVAILABLE`. |
+| `get_paediatric_dosing` | `drugName: String, weightKg: Double, indication: String` | Memerlukan monograf obat dan konteks terverifikasi; tidak ada rumus atau dosis fallback. |
+| `check_drug_interaction` | `drugList: List<String>` | Memerlukan dataset interaksi terverifikasi; tanpa catalog hasilnya `UNAVAILABLE`. |
+| `interpret_lab_result` | `testName: String, value: Double, unit: String, reference range` | Membandingkan nilai hanya dengan rentang dari laporan pengguna; generic range tidak dipakai. |
+| `evaluate_skin_abcd` | `image: validated local vision input` | Hanya runtime vision tervalidasi yang boleh menghasilkan output; heuristik pixel dan score benign dilarang. |
+| `search_skin_remedy` | `conditionKeywords: String` | Mengambil konten dari sumber lokal yang provenance-nya nyata; tanpa sumber hasilnya `UNAVAILABLE`. |
 
 ---
 
@@ -427,4 +434,4 @@ enum class DetailDepth(val promptModifier: String) {
    Jika kata kunci kegawatdaruratan terdeteksi (contoh: nyeri dada menjalar ke lengan, sesak napas biru, kejang anak, perdarahan hebat), sistem otomatis menampilkan **Banner Peringatan Darurat Merah** di atas layar chat dengan tombol panggil darurat lokal.
 3. **Disclaimer Baku**:
    Setiap percakapan ditutup dengan catatan:
-   > *"Informasi ini merupakan panduan kesehatan berbasis AI dan dokumen resmi. Selalu konsultasikan kondisi Anda dengan dokter atau tenaga medis profesional untuk diagnosis pasti."*
+   > *"Informasi lokal ini bukan diagnosis, resep, atau pengganti tenaga kesehatan. Konsultasikan keputusan medis dengan tenaga kesehatan profesional."*

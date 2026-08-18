@@ -13,6 +13,8 @@ import com.medbot.app.data.repository.ModelRepositoryImpl
 import com.medbot.app.data.repository.RagRepositoryImpl
 import com.medbot.app.data.repository.SkinRepositoryImpl
 import com.medbot.app.data.vision.SkinDiagnosisEngine
+import com.medbot.app.data.vision.AndroidSkinMediaGateway
+import com.medbot.app.data.platform.AndroidSafGateway
 import com.medbot.app.domain.agents.TriageOrchestrator
 import com.medbot.app.domain.repository.ChatRepository
 import com.medbot.app.domain.repository.DrugRepository
@@ -22,6 +24,9 @@ import com.medbot.app.domain.repository.RagRepository
 import com.medbot.app.domain.repository.SkinRepository
 import com.medbot.app.domain.repository.LocalLlmGateway
 import com.medbot.app.domain.repository.SkinAnalysisGateway
+import com.medbot.app.domain.repository.SkinMediaGateway
+import com.medbot.app.domain.repository.SafDocumentGateway
+import com.medbot.app.domain.repository.ModelFileGateway
 import com.medbot.app.domain.repository.UserPreferencesRepository
 import com.medbot.app.domain.usecase.AnalyzeSkinUseCase
 import com.medbot.app.domain.usecase.CheckDrugInteractionsUseCase
@@ -74,6 +79,24 @@ object MedBotModule {
     @Provides
     @Singleton
     fun provideSkinAnalysisGateway(engine: SkinDiagnosisEngine): SkinAnalysisGateway = engine
+
+    @Provides
+    @Singleton
+    fun provideSkinMediaGateway(application: Application): SkinMediaGateway =
+        AndroidSkinMediaGateway(application)
+
+    @Provides
+    @Singleton
+    fun provideAndroidSafGateway(application: Application): AndroidSafGateway =
+        AndroidSafGateway(application)
+
+    @Provides
+    @Singleton
+    fun provideSafDocumentGateway(gateway: AndroidSafGateway): SafDocumentGateway = gateway
+
+    @Provides
+    @Singleton
+    fun provideModelFileGateway(gateway: AndroidSafGateway): ModelFileGateway = gateway
 
     @Provides
     @Singleton

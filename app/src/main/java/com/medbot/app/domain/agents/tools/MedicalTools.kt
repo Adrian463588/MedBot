@@ -92,6 +92,17 @@ private fun validationError(toolName: String, message: String): ToolResult {
     )
 }
 
+private fun unavailable(toolName: String, message: String): ToolResult {
+    return ToolResult(
+        toolName = toolName,
+        isSuccess = false,
+        summary = "UNAVAILABLE: $message",
+        data = mapOf("status" to ToolResultStatus.UNAVAILABLE.name),
+        errorMessage = message,
+        status = ToolResultStatus.UNAVAILABLE
+    )
+}
+
 class UrgencyAssessorTool : LocalMedicalTool {
     override val name: String = "assess_urgency"
     override val description: String = "Menghitung tingkat urgensi klinis dan tanda bahaya (red flags)"
@@ -145,11 +156,15 @@ class UrgencyAssessorTool : LocalMedicalTool {
         val hasHigh = highKeywords.any { textQuery.contains(it) }
         val hasMedium = mediumKeywords.any { textQuery.contains(it) }
 
+        if (!hasEmergency && !hasHigh && !hasMedium) {
+            return insufficientData(name, "Tidak ada tanda bahaya atau pola gejala yang cukup untuk menentukan urgensi.")
+        }
+
         val level = when {
             hasEmergency -> UrgencyLevel.EMERGENCY
             hasHigh -> UrgencyLevel.HIGH
             hasMedium -> UrgencyLevel.MEDIUM
-            else -> UrgencyLevel.LOW
+            else -> error("Insufficient data is returned before urgency is built")
         }
 
         val advice = when (level) {
@@ -157,6 +172,7 @@ class UrgencyAssessorTool : LocalMedicalTool {
             UrgencyLevel.HIGH -> "PERLU PERHATIAN MEDIS SEGERA: Kunjungi puskesmas atau klinik dalam waktu < 24 jam."
             UrgencyLevel.MEDIUM -> "PERLU KONTROL: Lakukan observasi di rumah dan konsultasikan ke dokter jika tidak membaik dalam 2 hari."
             UrgencyLevel.LOW -> "RAWAT MANDIRI: Dapat ditangani dengan perawatan mandiri dan istirahat cukup."
+            UrgencyLevel.INSUFFICIENT_DATA -> error("Insufficient data is returned before advice is built")
         }
 
         return ToolResult(
@@ -199,54 +215,15 @@ class ZScoreCalculatorTool : LocalMedicalTool {
 
         val genderInput = params.requiredText("gender")
         if (genderInput !is InputValue.Valid) return genderInput.failure(name)
-        val isFemale = when (genderInput.value.lowercase()) {
-            "f", "female", "perempuan", "wanita" -> true
-            "m", "male", "laki-laki", "laki laki", "pria" -> false
+        when (genderInput.value.lowercase()) {
+            "f", "female", "perempuan", "wanita",
+            "m", "male", "laki-laki", "laki laki", "pria" -> Unit
             else -> return validationError(name, "Parameter 'gender' harus bernilai male/female.")
         }
 
-        // Median WHO standard approximations
-        val medianWeight = if (isFemale) {
-            3.2 + (ageMonths * 0.4)
-        } else {
-            3.3 + (ageMonths * 0.43)
-        }
-        val sdWeight = medianWeight * 0.12
-        val zWeightForAge = (weightKg - medianWeight) / sdWeight
-
-        val medianHeight = if (isFemale) {
-            49.0 + (ageMonths * 1.5)
-        } else {
-            50.0 + (ageMonths * 1.55)
-        }
-        val sdHeight = medianHeight * 0.045
-        val zHeightForAge = (heightCm - medianHeight) / sdHeight
-
-        val statusNutrition = when {
-            zWeightForAge < -3.0 -> "Gizi Buruk (Severely Underweight)"
-            zWeightForAge < -2.0 -> "Gizi Kurang (Underweight)"
-            zWeightForAge > 2.0 -> "Risiko Gizi Lebih / Obesitas"
-            else -> "Gizi Baik (Normal)"
-        }
-
-        val statusStunting = when {
-            zHeightForAge < -3.0 -> "Sangat Pendek (Severely Stunted)"
-            zHeightForAge < -2.0 -> "Pendek (Stunted)"
-            else -> "Tinggi Normal"
-        }
-
-        val summary = "Status Gizi: $statusNutrition (Z-BB/U: ${"%.2f".format(zWeightForAge)}), Status Pertumbuhan: $statusStunting (Z-TB/U: ${"%.2f".format(zHeightForAge)})"
-
-        return ToolResult(
-            toolName = name,
-            isSuccess = true,
-            summary = summary,
-            data = mapOf(
-                "zWeightForAge" to zWeightForAge,
-                "zHeightForAge" to zHeightForAge,
-                "statusNutrition" to statusNutrition,
-                "statusStunting" to statusStunting
-            )
+        return unavailable(
+            name,
+            "Dataset referensi pertumbuhan anak yang tervalidasi belum tersedia di perangkat; Z-score tidak dihitung dari aproksimasi."
         )
     }
 }
@@ -258,7 +235,7 @@ class PaediatricDosingTool : LocalMedicalTool {
     override suspend fun execute(params: Map<String, Any>): ToolResult {
         val drugInput = params.requiredText("drug_name")
         if (drugInput !is InputValue.Valid) return drugInput.failure(name)
-        val drugName = drugInput.value.lowercase()
+        val drugName = drugInput.value
 
         val weightInput = params.requiredFiniteNumber(
             "weight_kg",
@@ -270,45 +247,9 @@ class PaediatricDosingTool : LocalMedicalTool {
 
         val indicationInput = params.requiredText("indication")
         if (indicationInput !is InputValue.Valid) return indicationInput.failure(name)
-        val indication = indicationInput.value
-
-        val dosingInfo = when {
-            drugName.contains("paracetamol") || drugName.contains("pct") -> {
-                val mgMin = weightKg * 10.0
-                val mgMax = weightKg * 15.0
-                val syrup120Per5mlMin = (mgMin / 120.0) * 5.0
-                val syrup120Per5mlMax = (mgMax / 120.0) * 5.0
-                "Paracetamol: ${"%.0f".format(mgMin)}–${"%.0f".format(mgMax)} mg/kali minum (diberikan tiap 4-6 jam bila demam >38°C, maks 4x sehari). Sirup 120mg/5ml: ${"%.1f".format(syrup120Per5mlMin)}–${"%.1f".format(syrup120Per5mlMax)} ml/kali."
-            }
-            drugName.contains("ibuprofen") -> {
-                val mgMin = weightKg * 5.0
-                val mgMax = weightKg * 10.0
-                val syrup100Per5ml = (mgMax / 100.0) * 5.0
-                "Ibuprofen: ${"%.0f".format(mgMin)}–${"%.0f".format(mgMax)} mg/kali minum (tiap 6-8 jam sesudah makan). Sirup 100mg/5ml: ${"%.1f".format(syrup100Per5ml)} ml/kali."
-            }
-            drugName.contains("amoxicillin") || drugName.contains("amoksisilin") -> {
-                val dailyMg = weightKg * 50.0 // 50 mg/kgBB/hari dibagi 3 dosis
-                val perDoseMg = dailyMg / 3.0
-                val syrup125Per5ml = (perDoseMg / 125.0) * 5.0
-                "Amoxicillin: ${"%.0f".format(perDoseMg)} mg per kali (3 kali sehari tiap 8 jam). Sirup 125mg/5ml: ${"%.1f".format(syrup125Per5ml)} ml/kali (Wajib habiskan sesuai anjuran dokter)."
-            }
-            drugName.contains("cetirizine") || drugName.contains("setirizin") -> {
-                val dose = if (weightKg < 10.0) "2.5 mg (2.5 ml sirup 5mg/5ml) 1x sehari" else "5 mg (5 ml sirup 5mg/5ml) 1x sehari"
-                "Cetirizine Sirup 5mg/5ml: $dose untuk mengatasi alergi/gatal."
-            }
-            else -> return validationError(name, "Obat '$drugName' belum didukung oleh kalkulator deterministik.")
-        }
-
-        return ToolResult(
-            toolName = name,
-            isSuccess = true,
-            summary = dosingInfo,
-            data = mapOf(
-                "drug" to drugName,
-                "weightKg" to weightKg,
-                "indication" to indication,
-                "dosingText" to dosingInfo
-            )
+        return unavailable(
+            name,
+            "Monograf obat, konsentrasi sediaan, usia, kontraindikasi, alergi, fungsi ginjal, dan rencana klinis tervalidasi wajib tersedia sebelum dosis dapat dihitung."
         )
     }
 }
@@ -391,7 +332,7 @@ class DueDateCalculatorTool : LocalMedicalTool {
             return validationError(name, "Parameter tanggal HPHT bukan tanggal kalender yang valid.")
         }
 
-        // Naegele's rule: +7 days, -3 months, +1 year (or +7 days, +9 months)
+        // Naegele's rule: +7 days and +9 calendar months.
         calendar.add(java.util.Calendar.DAY_OF_MONTH, 7)
         calendar.add(java.util.Calendar.MONTH, 9)
 
@@ -401,7 +342,7 @@ class DueDateCalculatorTool : LocalMedicalTool {
 
         val monthNames = listOf("", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember")
         val hplFormatted = "$dueDay ${monthNames[dueMonth]} $dueYear"
-        val summary = "Taksiran Persalinan (HPL / Naegele): $hplFormatted (Berdasarkan HPHT $day/$month/$year). Lakukan kontrol kehamilan rutin (ANC) minimal 6 kali."
+        val summary = "Taksiran Persalinan (HPL / Naegele): $hplFormatted (berdasarkan HPHT $day/$month/$year). Hasil ini adalah perhitungan kalender, bukan penilaian kehamilan."
 
         return ToolResult(
             toolName = name,
@@ -437,50 +378,19 @@ class LabInterpreterTool : LocalMedicalTool {
         val unitInput = params.requiredText("unit")
         if (unitInput !is InputValue.Valid) return unitInput.failure(name)
         val unit = unitInput.value
-        if (!isCompatibleLabUnit(testName, unit)) {
-            return validationError(name, "Unit '$unit' tidak sesuai dengan pemeriksaan '$testName'.")
-        }
+        val lowInput = params.requiredFiniteNumber("reference_low", { it >= 0.0 }, "tidak negatif")
+        if (lowInput !is InputValue.Valid) return lowInput.failure(name)
+        val highInput = params.requiredFiniteNumber("reference_high", { it >= lowInput.value }, "lebih besar atau sama dengan batas bawah")
+        if (highInput !is InputValue.Valid) return highInput.failure(name)
+        val sourceInput = params.requiredText("reference_source")
+        if (sourceInput !is InputValue.Valid) return sourceInput.failure(name)
 
-        val (status, interpretation, normalRange) = when {
-            testName.contains("hemoglobin") || testName.contains("hb") -> {
-                when {
-                    value < 12.0 -> Triple("Rendah (Anemia)", "Kadar hemoglobin di bawah batas normal, mengindikasikan anemia (kekurangan zat besi atau kehilangan darah).", "12.0 - 17.5 g/dL")
-                    value > 17.5 -> Triple("Tinggi (Polisitemia)", "Kadar hemoglobin tinggi, dapat terkait hemokonsentrasi/dehidrasi atau merokok.", "12.0 - 17.5 g/dL")
-                    else -> Triple("Normal", "Kadar hemoglobin dalam batas normal yang sehat.", "12.0 - 17.5 g/dL")
-                }
-            }
-            testName.contains("trombosit") || testName.contains("platelet") -> {
-                when {
-                    value < 150000.0 -> Triple("Rendah (Trombositopenia)", "Waspadai tanda demam berdarah dengue (DBD) atau gangguan pembekuan darah. Amati tanda perdarahan.", "150.000 - 450.000 /µL")
-                    value > 450000.0 -> Triple("Tinggi (Trombositosis)", "Peningkatan sel pembeku darah akibat respon inflamasi atau infeksi.", "150.000 - 450.000 /µL")
-                    else -> Triple("Normal", "Jumlah keping darah dalam rentang normal.", "150.000 - 450.000 /µL")
-                }
-            }
-            testName.contains("leukosit") || testName.contains("wbc") -> {
-                when {
-                    value < 4000.0 -> Triple("Rendah (Leukopenia)", "Kadar sel darah putih rendah; waspadai supresi imun atau infeksi virus fase awal.", "4.000 - 10.000 /µL")
-                    value > 10000.0 -> Triple("Tinggi (Leukositosis)", "Tanda umum adanya infeksi bakteri aktif, radang akut, atau stres fisik tubuh.", "4.000 - 10.000 /µL")
-                    else -> Triple("Normal", "Jumlah leukosit normal.", "4.000 - 10.000 /µL")
-                }
-            }
-            testName.contains("gds") || testName.contains("gula") || testName.contains("glucose") -> {
-                when {
-                    value < 70.0 -> Triple("Rendah (Hipoglikemia)", "Gula darah terlalu rendah! Segera konsumsi 1-2 sendok gula atau teh manis hangat.", "70 - 140 mg/dL")
-                    value > 200.0 -> Triple("Tinggi (Hiperglikemia)", "Gula darah sewaktu sangat tinggi, mengindikasikan diabetes yang belum terkontrol.", "70 - 140 mg/dL")
-                    value in 140.0..199.0 -> Triple("Perhatian (Toleransi Glukosa Terganggu)", "Nilai di atas normal sewaktu, disarankan tes GDP dan HbA1c konfirmasi.", "70 - 140 mg/dL")
-                    else -> Triple("Normal", "Kadar gula darah sewaktu normal.", "70 - 140 mg/dL")
-                }
-            }
-            testName.contains("asam urat") || testName.contains("uric") -> {
-                when {
-                    value > 7.0 -> Triple("Tinggi (Hiperurisemia)", "Asam urat tinggi dapat memicu radang sendi gout akut dan pembentukan kristal ginjal. Batasi jeroan dan emping.", "3.5 - 7.0 mg/dL")
-                    else -> Triple("Normal", "Kadar asam urat dalam batas aman.", "3.5 - 7.0 mg/dL")
-                }
-            }
-            else -> Triple("Tercatat", "Hasil tes $testName terukur $value. Konsultasikan rentang rujukan spesifik lab Anda dengan dokter.", "Sesuai rujukan lab")
+        val status = when {
+            value < lowInput.value -> "BELOW_REFERENCE"
+            value > highInput.value -> "ABOVE_REFERENCE"
+            else -> "WITHIN_REFERENCE"
         }
-
-        val summary = "Evaluasi Lab: $testName = $value $unit (Status: $status, Rujukan: $normalRange). $interpretation"
+        val summary = "Hasil $testName: $value $unit dibandingkan dengan rentang ${lowInput.value}–${highInput.value} $unit dari ${sourceInput.value}. Status: $status. Ini bukan diagnosis."
 
         return ToolResult(
             toolName = name,
@@ -490,25 +400,12 @@ class LabInterpreterTool : LocalMedicalTool {
                 "testName" to testName,
                 "value" to value,
                 "unit" to unit,
-                "status" to status
+                "status" to status,
+                "referenceLow" to lowInput.value,
+                "referenceHigh" to highInput.value,
+                "referenceSource" to sourceInput.value
             )
         )
-    }
-
-    private fun isCompatibleLabUnit(testName: String, unit: String): Boolean {
-        val normalizedUnit = unit.lowercase()
-            .replace("μ", "u")
-            .replace("µ", "u")
-            .replace(" ", "")
-        return when {
-            testName.contains("hemoglobin") || testName.contains("hb") -> normalizedUnit == "g/dl"
-            testName.contains("trombosit") || testName.contains("platelet") ||
-                testName.contains("leukosit") || testName.contains("wbc") ->
-                normalizedUnit in setOf("/ul", "cells/ul", "cell/ul", "sel/ul")
-            testName.contains("gds") || testName.contains("gula") || testName.contains("glucose") ||
-                testName.contains("asam urat") || testName.contains("uric") -> normalizedUnit == "mg/dl"
-            else -> true
-        }
     }
 }
 
@@ -537,29 +434,9 @@ class SkinAbcdEvaluatorTool : LocalMedicalTool {
         if (diameterInput !is InputValue.Valid) return diameterInput.failure(name)
         val diameterMm = diameterInput.value
 
-        var riskScore = 0.0
-        if (asymmetry) riskScore += 2.5
-        if (borderIrregular) riskScore += 2.5
-        if (colorVariegated) riskScore += 2.5
-        if (diameterMm >= 6.0) riskScore += 2.5
-
-        val classification = when {
-            riskScore >= 7.5 -> "Risiko Tinggi (Perlu Biopsi/Pemeriksaan Dermatologi Segera)"
-            riskScore >= 5.0 -> "Risiko Sedang (Pantau Perubahan Ukuran & Warna)"
-            else -> "Risiko Rendah / Lesi Jinak (Tetap Amati Linimasa)"
-        }
-
-        val summary = "Skor Risiko ABCD: ${"%.1f".format(riskScore)}/10.0 ($classification). Asimetri: $asymmetry, Batas ireguler: $borderIrregular, Warna bervariasi: $colorVariegated, Diameter: ${diameterMm} mm."
-
-        return ToolResult(
-            toolName = name,
-            isSuccess = true,
-            summary = summary,
-            data = mapOf(
-                "totalRiskScore" to riskScore,
-                "classification" to classification,
-                "diameterMm" to diameterMm
-            )
+        return unavailable(
+            name,
+            "Protokol penilaian lesi tervalidasi dan pemeriksaan klinis langsung belum tersedia; input ABCD tidak diterjemahkan menjadi skor atau label jinak/kanker."
         )
     }
 }

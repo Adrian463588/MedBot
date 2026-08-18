@@ -20,6 +20,18 @@ interface LocalLlmGateway {
     ): Flow<String>
 }
 
+enum class LocalInferenceFailure {
+    VISION_UNAVAILABLE,
+    MODEL_UNAVAILABLE,
+    RAG_UNAVAILABLE
+}
+
+/** Explicit local-runtime failure; callers must render an unavailable state. */
+class LocalInferenceException(
+    val failure: LocalInferenceFailure,
+    message: String
+) : IllegalStateException(message)
+
 /** Domain boundary for a local vision model; no heuristic implementation is valid. */
 interface SkinAnalysisGateway {
     fun analyzeSkinImage(imagePath: String, bodyPart: String, userNotes: String = ""): SkinRecord

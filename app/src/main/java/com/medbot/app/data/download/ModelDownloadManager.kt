@@ -37,13 +37,23 @@ class ModelDownloadManager(context: Context) {
     fun cancelDownload(modelId: String) {
         workManager.cancelUniqueWork("download_$modelId")
         val manifest = ModelRegistry.getManifestById(modelId) ?: return
-        val extension = when (manifest.format.name) {
-            "LITERTLM" -> "litertlm"
-            "GGUF" -> "gguf"
-            "ONNX" -> "onnx"
-            else -> return
-        }
-        File(appContext.filesDir, "models/${manifest.id}.$extension.part").delete()
+        if (manifest.format != com.medbot.app.domain.model.ModelFormat.LITERTLM) return
+        File(appContext.filesDir, "models/${manifest.id}.litertlm.part").delete()
+    }
+
+    fun deleteModel(modelId: String) {
+        workManager.cancelUniqueWork("download_$modelId")
+        val manifest = ModelRegistry.getManifestById(modelId) ?: return
+        if (manifest.format != com.medbot.app.domain.model.ModelFormat.LITERTLM) return
+        File(appContext.filesDir, "models/${manifest.id}.litertlm").delete()
+        File(appContext.filesDir, "models/${manifest.id}.litertlm.part").delete()
+    }
+
+    fun getInstalledModelPath(modelId: String): String? {
+        val manifest = ModelRegistry.getManifestById(modelId) ?: return null
+        if (manifest.format != com.medbot.app.domain.model.ModelFormat.LITERTLM) return null
+        val target = File(appContext.filesDir, "models/${manifest.id}.litertlm")
+        return target.takeIf { it.isFile }?.absolutePath
     }
 
     fun getDownloadProgressFlow(modelId: String): Flow<DownloadProgress?> =
@@ -70,15 +80,12 @@ class ModelDownloadManager(context: Context) {
     fun checkFileStatus(modelId: String): DownloadProgress {
         val manifest = ModelRegistry.getManifestById(modelId)
             ?: return DownloadProgress(modelId, 0L, 0L, 0L, ModelDownloadStatus.ERROR, "MODEL_UNAVAILABLE")
-        val extension = when (manifest.format.name) {
-            "LITERTLM" -> "litertlm"
-            "GGUF" -> "gguf"
-            "ONNX" -> "onnx"
-            else -> return DownloadProgress(modelId, 0L, manifest.sizeBytes, 0L, ModelDownloadStatus.ERROR, "MODEL_FORMAT_UNSUPPORTED")
+        if (manifest.format != com.medbot.app.domain.model.ModelFormat.LITERTLM) {
+            return DownloadProgress(modelId, 0L, manifest.sizeBytes, 0L, ModelDownloadStatus.ERROR, "MODEL_FORMAT_UNSUPPORTED")
         }
         val directory = File(appContext.filesDir, "models")
-        val target = File(directory, "${manifest.id}.$extension")
-        val part = File(directory, "${manifest.id}.$extension.part")
+        val target = File(directory, "${manifest.id}.litertlm")
+        val part = File(directory, "${manifest.id}.litertlm.part")
         return when {
             target.isFile && target.length() == manifest.sizeBytes -> DownloadProgress(
                 modelId, target.length(), manifest.sizeBytes, 0L, ModelDownloadStatus.READY_TO_LOAD

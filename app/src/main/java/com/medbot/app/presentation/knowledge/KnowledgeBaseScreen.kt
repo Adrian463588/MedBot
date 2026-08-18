@@ -1,430 +1,305 @@
 package com.medbot.app.presentation.knowledge
 
 import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.UploadFile
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
-import dagger.hilt.android.lifecycle.HiltViewModel
+import com.medbot.app.R
+import com.medbot.app.core.designsystem.components.AdaptiveContent
+import com.medbot.app.core.designsystem.components.AdaptiveListDetail
+import com.medbot.app.core.designsystem.components.MedBotSpacing
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.model.RagDocument
 import com.medbot.app.domain.model.SearchResult
-import com.medbot.app.domain.repository.RagRepository
-import com.medbot.app.domain.usecase.IngestSafDocumentsUseCase
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import java.io.InputStream
 import java.text.SimpleDateFormat
-import java.util.*
-import javax.inject.Inject
-
-@HiltViewModel
-class KnowledgeViewModel @Inject constructor(
-    private val ragRepository: RagRepository,
-    private val ingestSafDocumentsUseCase: IngestSafDocumentsUseCase
-) : ViewModel() {
-
-    val documents: StateFlow<List<RagDocument>> = ragRepository.getDocuments()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    private val _searchResults = MutableStateFlow<List<SearchResult>>(emptyList())
-    val searchResults: StateFlow<List<SearchResult>> = _searchResults.asStateFlow()
-
-    private val _isIngesting = MutableStateFlow(false)
-    val isIngesting: StateFlow<Boolean> = _isIngesting.asStateFlow()
-
-    private val _ingestMessage = MutableStateFlow<String?>(null)
-    val ingestMessage: StateFlow<String?> = _ingestMessage.asStateFlow()
-
-    fun ingestDocumentFromUri(
-        fileName: String,
-        fileUri: String,
-        mimeType: String,
-        inputStream: InputStream
-    ) {
-        viewModelScope.launch {
-            _isIngesting.value = true
-            _ingestMessage.value = "Sedang memproses $fileName..."
-            try {
-                val res = ingestSafDocumentsUseCase.execute(fileName, fileUri, mimeType, inputStream)
-                if (res.isSuccess) {
-                    _ingestMessage.value = "Sukses mengindeks $fileName (${res.getOrNull()?.chunkCount} Chunks Vektor)"
-                } else {
-                    _ingestMessage.value = "${res.exceptionOrNull()?.message ?: "RAG tidak tersedia"}"
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                _ingestMessage.value = "RAG tidak tersedia: ${error.message ?: "proses gagal"}"
-            } finally {
-                _isIngesting.value = false
-            }
-        }
-    }
-
-    fun searchKnowledge(query: String) {
-        if (query.isBlank()) {
-            _searchResults.value = emptyList()
-            return
-        }
-        viewModelScope.launch {
-            try {
-                _searchResults.value = ragRepository.searchSimilarChunks(query, topK = 4)
-                _ingestMessage.value = null
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                _searchResults.value = emptyList()
-                _ingestMessage.value = "RAG tidak tersedia: ${error.message ?: "embedding lokal belum tersedia"}"
-            }
-        }
-    }
-
-    fun deleteDoc(docId: String) {
-        viewModelScope.launch {
-            ragRepository.deleteDocument(docId)
-        }
-    }
-
-    fun reportUnavailable(message: String) {
-        _ingestMessage.value = message
-    }
-
-}
+import java.util.Date
+import java.util.Locale
 
 @Composable
-fun KnowledgeBaseScreen(
-    viewModel: KnowledgeViewModel,
-    onNavigateBack: () -> Unit
-) {
-    val context = LocalContext.current
+fun KnowledgeBaseScreen(viewModel: KnowledgeViewModel, onNavigateBack: () -> Unit) {
     val documents by viewModel.documents.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val isIngesting by viewModel.isIngesting.collectAsStateWithLifecycle()
-    val ingestMsg by viewModel.ingestMessage.collectAsStateWithLifecycle()
-    val ingestMessage = ingestMsg
+    val message by viewModel.ingestMessage.collectAsStateWithLifecycle()
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedDocumentId by rememberSaveable { mutableStateOf<String?>(null) }
+    val selectedDocument = documents.firstOrNull { it.id == selectedDocumentId }
+    val isSinglePane = LocalConfiguration.current.screenWidthDp < 840
 
-    var testQuery by remember { mutableStateOf("") }
-
-    // Native SAF Document Picker Activity Result Launcher
-    val safDocPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            val contentResolver = context.contentResolver
-            val inputStream = contentResolver.openInputStream(uri)
-            val fileName = contentResolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME),
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }?.takeIf { it.isNotBlank() }
-            val mimeType = contentResolver.getType(uri).orEmpty()
-
-            if (inputStream != null && fileName != null) {
-                viewModel.ingestDocumentFromUri(
-                    fileName = fileName,
-                    fileUri = uri.toString(),
-                    mimeType = mimeType,
-                    inputStream = inputStream
-                )
-            } else {
-                inputStream?.close()
-                viewModel.reportUnavailable("RAG tidak tersedia: nama atau isi dokumen sumber tidak dapat dibaca.")
-            }
-        }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.onEvent(KnowledgeUiEvent.IngestDocument(uri.toString()))
+    }
+    val launchPicker = {
+        picker.launch(
+            arrayOf(
+                "application/pdf",
+                "text/plain",
+                "text/markdown",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+        )
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            MedBotTopAppBar(
-                title = "Knowledge Base RAG",
-                subtitle = "Penyimpanan & Indeks Vektor Dokumen SAF",
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+    Column {
+        MedBotTopAppBar(
+            title = stringResource(R.string.knowledge_title),
+            subtitle = stringResource(R.string.knowledge_subtitle),
+            navigationIcon = {
+                IconButton(onClick = { if (isSinglePane && selectedDocumentId != null) selectedDocumentId = null else onNavigateBack() }, modifier = Modifier.springBounceClick()) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                }
+            },
+            actions = {
+                IconButton(onClick = launchPicker, enabled = !isIngesting, modifier = Modifier.springBounceClick()) {
+                    Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = stringResource(R.string.knowledge_import))
+                }
+            }
+        )
+        AdaptiveContent(modifier = Modifier.weight(1f), maxContentWidth = 1_040.dp) {
+            AdaptiveListDetail(
+                modifier = Modifier.fillMaxSize(),
+                 selectedKey = selectedDocumentId,
+                 onBackFromDetail = { selectedDocumentId = null },
+                listPane = {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(MedBotSpacing.medium),
+                        verticalArrangement = Arrangement.spacedBy(MedBotSpacing.large)
+                    ) {
+                        item {
+                            Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
+                                Text(stringResource(R.string.knowledge_import_heading), style = MaterialTheme.typography.headlineSmall)
+                                Text(
+                                    stringResource(R.string.knowledge_import_support),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Button(
+                                    onClick = launchPicker,
+                                    enabled = !isIngesting,
+                                    modifier = Modifier.fillMaxWidth().springBounceClick()
+                                ) {
+                                    Icon(Icons.Filled.UploadFile, contentDescription = null)
+                                    Spacer(Modifier.width(MedBotSpacing.small))
+                                    Text(stringResource(R.string.knowledge_import))
+                                }
+                                if (isIngesting) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Spacer(Modifier.width(MedBotSpacing.small))
+                                        Text(stringResource(R.string.knowledge_processing), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                if (message != null && !isIngesting) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        shape = MaterialTheme.shapes.small,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = messageText(message = message),
+                                            modifier = Modifier.padding(MedBotSpacing.medium),
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = query,
+                                 onValueChange = { query = it; viewModel.onEvent(KnowledgeUiEvent.Search(it)) },
+                                label = { Text(stringResource(R.string.knowledge_search_label)) },
+                                supportingText = { Text(stringResource(R.string.knowledge_search_support)) },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+                        if (searchResults.isNotEmpty()) {
+                            item { Text(stringResource(R.string.knowledge_search_results, searchResults.size), style = MaterialTheme.typography.titleMedium) }
+                            items(searchResults, key = { it.chunk.id }) { result ->
+                                SearchResultRow(result) {
+                                    selectedDocumentId = documents.firstOrNull { it.fileName == result.documentTitle }?.id
+                                }
+                            }
+                        }
+                        item { Text(stringResource(R.string.knowledge_documents_heading, documents.size), style = MaterialTheme.typography.titleLarge) }
+                        if (documents.isEmpty()) {
+                            item {
+                                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+                                    Text(stringResource(R.string.knowledge_no_documents), modifier = Modifier.padding(MedBotSpacing.large), style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+                        } else {
+                            items(documents, key = { it.id }) { document ->
+                                DocumentRow(
+                                    document = document,
+                                    selected = document.id == selectedDocumentId,
+                                    onSelect = { selectedDocumentId = document.id },
+                                    onDelete = {
+                                        if (selectedDocumentId == document.id) selectedDocumentId = null
+                                         viewModel.onEvent(KnowledgeUiEvent.DeleteDocument(document.id))
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            safDocPickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "*/*"))
-                        },
-                        enabled = !isIngesting,
-                        modifier = Modifier.springBounceClick()
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.NoteAdd, contentDescription = "Pilih Dokumen SAF", tint = MaterialTheme.colorScheme.primary)
+                detailPane = {
+                    if (selectedDocument == null) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize().padding(MedBotSpacing.medium),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = MaterialTheme.shapes.large
+                        ) {
+                            Column(modifier = Modifier.padding(MedBotSpacing.large), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
+                                Text(stringResource(R.string.knowledge_detail_empty_title), style = MaterialTheme.typography.titleLarge)
+                                Text(stringResource(R.string.knowledge_detail_empty_support), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    } else {
+                        KnowledgeDocumentDetail(selectedDocument)
                     }
                 }
             )
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
-        ) {
-            // Import SAF Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = "Folder SAF",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Pemuatan Dokumen Medis (SAF)",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Pilih file PDF atau TXT panduan medis dari penyimpanan perangkat Anda via Android Storage Access Framework (SAF).",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
+    }
+}
 
-                        Button(
-                            onClick = {
-                                safDocPickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/markdown", "*/*"))
-                            },
-                            enabled = !isIngesting,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().springBounceClick()
-                        ) {
-                            Icon(Icons.Default.UploadFile, contentDescription = "Pilih File")
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Pilih File SAF")
-                        }
+@Composable
+private fun messageText(message: KnowledgeMessage?): String {
+    return when (message?.kind) {
+        KnowledgeMessageKind.PROCESSING -> stringResource(
+            R.string.knowledge_processing_file,
+            message.fileName.orEmpty()
+        )
+        KnowledgeMessageKind.INDEXED -> stringResource(
+            R.string.knowledge_indexed,
+            message.chunkCount ?: 0
+        )
+        KnowledgeMessageKind.EMBEDDER_UNAVAILABLE -> stringResource(R.string.knowledge_embedder_unavailable)
+        KnowledgeMessageKind.DOCUMENT_UNAVAILABLE -> stringResource(R.string.knowledge_document_unavailable)
+        KnowledgeMessageKind.FAILED -> stringResource(R.string.knowledge_error)
+        null -> ""
+    }
+}
 
-            if (isIngesting) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = ingestMsg ?: "Sedang memproses dokumen...",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-                    }
+@Composable
+private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).springBounceClick()
+    ) {
+        Column(modifier = Modifier.padding(MedBotSpacing.medium)) {
+            Text(result.documentTitle, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(result.chunk.textContent, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = MedBotSpacing.small))
+            Text(stringResource(R.string.knowledge_score, result.similarityScore), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = MedBotSpacing.small))
+        }
+    }
+}
 
-                    if (!isIngesting && !ingestMessage.isNullOrBlank()) {
-                        val message = ingestMessage.orEmpty()
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Surface(
-                            color = if (message.startsWith("Sukses")) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.secondaryContainer
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-                    }
+@Composable
+private fun DocumentRow(document: RagDocument, selected: Boolean, onSelect: () -> Unit, onDelete: () -> Unit) {
+    val date = rememberDocumentDate(document.indexedAt)
+    Surface(
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+         modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onSelect).springBounceClick()
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(MedBotSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(MedBotSpacing.medium))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(document.fileName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val metadata = if (document.pageCount > 0) {
+                    stringResource(R.string.knowledge_document_meta, document.chunkCount, document.pageCount, date)
+                } else {
+                    stringResource(R.string.knowledge_document_meta_unknown_pages, document.chunkCount, date)
                 }
+                Text(metadata, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            // Test Vector Search Query Box
-            item {
-                Text("Uji Pencarian Semantik Vektor (Cosine Similarity)", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = testQuery,
-                    onValueChange = {
-                        testQuery = it
-                        viewModel.searchKnowledge(it)
-                    },
-                    placeholder = { Text("Contoh: tanda bahaya dbd, target tensi darah diabetes") },
-                    trailingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = "Cari")
-                    },
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            // Live Vector Search Results
-            if (searchResults.isNotEmpty()) {
-                item {
-                    Text(
-                        text = "Hasil Cosine Similarity Top-${searchResults.size}:",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                items(searchResults) { result ->
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = result.documentTitle,
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Surface(
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                    shape = RoundedCornerShape(6.dp)
-                                ) {
-                                    Text(
-                                        text = "Skor: ${"%.3f".format(result.similarityScore)}",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = result.chunk.textContent,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Indexed Documents List
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Dokumen Terindeks (${documents.size})",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-            }
-
-            if (documents.isEmpty()) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "Belum ada dokumen yang diindeks. Tekan tombol di atas untuk memilih file dari SAF.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            } else {
-                items(documents) { doc ->
-                    DocumentItemCard(doc = doc, onDelete = { viewModel.deleteDoc(doc.id) })
-                }
+            IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
+                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
             }
         }
     }
 }
 
 @Composable
-fun DocumentItemCard(doc: RagDocument, onDelete: () -> Unit) {
-    val dateStr = remember(doc.indexedAt) {
-        val sdf = SimpleDateFormat("dd MMM yyyy", Locale("id", "ID"))
-        sdf.format(Date(doc.indexedAt))
-    }
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth()
+private fun KnowledgeDocumentDetail(document: RagDocument) {
+    Surface(
+        modifier = Modifier.fillMaxSize().padding(MedBotSpacing.medium),
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.padding(16.dp).fillMaxWidth()
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    shape = CircleShape,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = doc.fileName,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "${doc.chunkCount} Chunks Vektor • ${doc.pageCount} Halaman • $dateStr",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
-                Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
-            }
+        Column(modifier = Modifier.padding(MedBotSpacing.large), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
+            Text(document.fileName, style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.knowledge_detail_meta, document.mimeType, document.fileSize), style = MaterialTheme.typography.bodyMedium)
+            DetailValue(stringResource(R.string.knowledge_detail_checksum), document.sha256)
+            DetailValue(stringResource(R.string.knowledge_detail_source), document.fileUri)
+            Text(stringResource(R.string.knowledge_detail_provenance), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+@Composable
+private fun DetailValue(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.xSmall)) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        Text(value, style = MaterialTheme.typography.bodySmall, maxLines = 5, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+@Composable
+private fun rememberDocumentDate(timestamp: Long): String {
+    return remember(timestamp) { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(timestamp)) }
 }
