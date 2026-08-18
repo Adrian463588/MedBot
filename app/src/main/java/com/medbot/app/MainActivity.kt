@@ -3,26 +3,20 @@ package com.medbot.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
-import dagger.hilt.android.AndroidEntryPoint
-import com.medbot.app.presentation.theme.MedBotTheme
-import com.medbot.app.presentation.navigation.MainNavigation
+import androidx.activity.enableEdgeToEdge
+import com.medbot.app.core.designsystem.theme.MedBotTheme
+import com.medbot.app.presentation.navigation.MedBotNavigation
 
-@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        val appContainer = (application as MedBotApplication).container
+
         setContent {
             MedBotTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    MainNavigation()
-                }
+                MedBotNavigation(appContainer = appContainer)
             }
         }
     }

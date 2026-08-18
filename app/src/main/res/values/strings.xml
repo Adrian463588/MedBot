@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">MedBot</string>
+    <string name="app_tagline">Asisten Medis On-Device &amp; RAG Klinis</string>
 </resources>
