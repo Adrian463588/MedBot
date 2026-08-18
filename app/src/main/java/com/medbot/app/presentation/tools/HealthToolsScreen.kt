@@ -133,7 +133,7 @@ fun HealthToolsScreen(
     Scaffold(
         topBar = {
             MedBotTopAppBar(
-                title = "Perkakas Medis Lokal",
+                title = "Perkakas Medis Terpadu",
                 subtitle = "Formularium Obat, Rentang Lab & Kalkulator",
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
@@ -157,7 +157,15 @@ fun HealthToolsScreen(
                     Tab(
                         selected = selectedTab == index,
                         onClick = { viewModel.selectTab(index) },
-                        text = { Text(title, style = MaterialTheme.typography.labelSmall, maxLines = 1, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal) }
+                        text = {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                                ),
+                                maxLines = 1
+                            )
+                        }
                     )
                 }
             }
@@ -197,43 +205,44 @@ fun DrugTabContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // Interaction Checker Card
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "⚡ Cek Interaksi Antar-Obat Lokal",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = drugA,
                             onValueChange = { drugA = it },
-                            label = { Text("Nama Obat 1") },
+                            label = { Text("Obat 1") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         OutlinedTextField(
                             value = drugB,
                             onValueChange = { drugB = it },
-                            label = { Text("Nama Obat 2") },
+                            label = { Text("Obat 2") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = { onCheckInteraction(drugA, drugB) },
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.AutoMirrored.Filled.CompareArrows, contentDescription = "Cek")
                         Spacer(modifier = Modifier.width(6.dp))
@@ -241,14 +250,14 @@ fun DrugTabContent(
                     }
 
                     if (interactions.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         interactions.forEach { inter ->
                             Surface(
                                 color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
+                                Column(modifier = Modifier.padding(14.dp)) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -260,19 +269,19 @@ fun DrugTabContent(
                                         )
                                         Surface(
                                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
-                                            shape = RoundedCornerShape(4.dp)
+                                            shape = RoundedCornerShape(6.dp)
                                         ) {
                                             Text(
                                                 text = inter.severity.label,
                                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                                 color = MaterialTheme.colorScheme.error,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(inter.description, style = MaterialTheme.typography.bodySmall)
                                     Spacer(modifier = Modifier.height(6.dp))
+                                    Text(inter.description, style = MaterialTheme.typography.bodySmall)
+                                    Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "💡 Saran Klinis: ${inter.recommendation}",
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
@@ -292,21 +301,22 @@ fun DrugTabContent(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Cari obat (misal: paracetamol, amlodipine, maag)...") },
+                placeholder = { Text("Cari obat (misal: paracetamol, amlodipine)...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Cari") },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             )
         }
 
         items(filteredDrugs) { drug ->
             Card(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -319,26 +329,34 @@ fun DrugTabContent(
                         )
                         Surface(
                             color = if (drug.isOtc) UrgencyLowGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(4.dp)
+                            shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
                                 text = if (drug.isOtc) "Bebas (OTC)" else "Resep Dokter",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = if (drug.isOtc) UrgencyLowGreen else MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
                     }
-                    Text(text = "Generik: ${drug.genericName} • Kategori: ${drug.category}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Generik: ${drug.genericName} • Kategori: ${drug.category}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(text = "Indikasi: ${drug.indication}", style = MaterialTheme.typography.bodySmall)
                     Text(text = "Dosis Dewasa: ${drug.adultDose}", style = MaterialTheme.typography.bodySmall)
                     if (drug.childDose.isNotBlank()) {
                         Text(text = "Dosis Anak: ${drug.childDose}", style = MaterialTheme.typography.bodySmall)
                     }
                     if (drug.affordableAlternatives.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(text = "Pilihan Generik Terjangkau: ${drug.affordableAlternatives.joinToString(", ")}", style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Alternatif Generik Terjangkau: ${drug.affordableAlternatives.joinToString(", ")}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -354,36 +372,37 @@ fun LabTabContent(labTests: List<LabTest>) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // Interactive Value Checker Card
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "🧪 Kalkulator Interpretasi Nilai Lab",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Pilih parameter lab di bawah, masukkan angka hasil tes Anda untuk evaluasi instan.",
+                        text = "Pilih parameter lab di bawah, lalu masukkan angka hasil tes Anda untuk evaluasi instan.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     if (selectedTest != null) {
                         Surface(
                             color = MaterialTheme.colorScheme.surface,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
                                     text = "Parameter: ${selectedTest!!.testName}",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
@@ -393,14 +412,14 @@ fun LabTabContent(labTests: List<LabTest>) {
                                     text = "Rentang Normal: ${selectedTest!!.normalLow} - ${selectedTest!!.normalHigh} ${selectedTest!!.unit}",
                                     style = MaterialTheme.typography.labelSmall
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedTextField(
                                         value = inputValueStr,
                                         onValueChange = { inputValueStr = it },
-                                        label = { Text("Hasil Angka Anda (${selectedTest!!.unit})") },
+                                        label = { Text("Hasil Angka (${selectedTest!!.unit})") },
                                         modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(10.dp)
                                     )
                                     Button(
                                         onClick = {
@@ -420,7 +439,7 @@ fun LabTabContent(labTests: List<LabTest>) {
                                                 evaluationResult = "[STATUS: $status] Nilai ${value} ${t.unit} (Normal: ${t.normalLow} - ${t.normalHigh} ${t.unit}).\n\n$explanation"
                                             }
                                         },
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         modifier = Modifier.align(Alignment.CenterVertically).springBounceClick()
                                     ) {
                                         Text("Evaluasi")
@@ -428,17 +447,17 @@ fun LabTabContent(labTests: List<LabTest>) {
                                 }
 
                                 if (evaluationResult != null) {
-                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(12.dp))
                                     Surface(
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Text(
                                             text = evaluationResult!!,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.padding(10.dp)
+                                            modifier = Modifier.padding(12.dp)
                                         )
                                     }
                                 }
@@ -450,17 +469,18 @@ fun LabTabContent(labTests: List<LabTest>) {
         }
 
         item {
-            Text("Pilih Parameter Laboratorium Standar", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Text("Pilih Parameter Laboratorium", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
         }
 
         items(labTests) { test ->
             val isSelected = selectedTest?.testName == test.testName
             Card(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier
                     .fillMaxWidth()
                     .springBounceClick()
@@ -470,7 +490,7 @@ fun LabTabContent(labTests: List<LabTest>) {
                         evaluationResult = null
                     }
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -511,17 +531,19 @@ fun CalculatorTabContent() {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         // WHO Pediatric Z-Score Calculator
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "👶 Kalkulator WHO Z-Score & Dosis Anak",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -550,23 +572,23 @@ fun CalculatorTabContent() {
                         onValueChange = { ageMonths = it },
                         label = { Text("Usia Anak (Bulan)") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = weightKg,
                             onValueChange = { weightKg = it },
-                            label = { Text("Berat Badan (kg)") },
+                            label = { Text("Berat (kg)") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         OutlinedTextField(
                             value = heightCm,
                             onValueChange = { heightCm = it },
-                            label = { Text("Tinggi Badan (cm)") },
+                            label = { Text("Tinggi (cm)") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
 
@@ -584,7 +606,7 @@ fun CalculatorTabContent() {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = {
                             val a = ageMonths.toIntOrNull() ?: 24
@@ -602,23 +624,23 @@ fun CalculatorTabContent() {
                             }
                         },
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Hitung Z-Score & Dosis Sirup")
                     }
 
                     if (calcResult != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = calcResult!!,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(12.dp)
+                                modifier = Modifier.padding(14.dp)
                             )
                         }
                     }
@@ -629,12 +651,13 @@ fun CalculatorTabContent() {
         // Adult BMI & Body Metrics Calculator
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         text = "🏃 Indeks Massa Tubuh (BMI) & Kalori Dewasa",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -647,17 +670,17 @@ fun CalculatorTabContent() {
                             onValueChange = { adultWeight = it },
                             label = { Text("Berat (kg)") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         OutlinedTextField(
                             value = adultHeight,
                             onValueChange = { adultHeight = it },
                             label = { Text("Tinggi (cm)") },
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
                             val w = adultWeight.toDoubleOrNull() ?: 65.0
@@ -673,23 +696,23 @@ fun CalculatorTabContent() {
                             bmiResult = "Skor BMI: ${"%.1f".format(bmi)} kg/m² ($category)\nEstimasi Kalori Dasar (BMR): ~${bmr.toInt()} kkal/hari."
                         },
                         modifier = Modifier.fillMaxWidth().springBounceClick(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Hitung BMI & Kebutuhan Kalori")
                     }
 
                     if (bmiResult != null) {
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = bmiResult!!,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(12.dp)
+                                modifier = Modifier.padding(14.dp)
                             )
                         }
                     }
@@ -712,43 +735,42 @@ fun RemindersTabContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         item {
             Card(
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Text(
-                        text = "⏰ Tambah Pengingat Minum Obat / Cek Tensi",
+                        text = "⏰ Tambah Jadwal Pengingat",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = newTitle,
                         onValueChange = { newTitle = it },
                         placeholder = { Text("Contoh: Amlodipine 5mg (Pagi hari)") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                val title = newTitle.ifBlank { "Minum Obat" }
-                                onAdd(title, hour, minute)
-                                newTitle = ""
-                            },
-                            modifier = Modifier.weight(1f).springBounceClick(),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.AlarmAdd, contentDescription = "Tambah")
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Simpan Pengingat")
-                        }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            val title = newTitle.ifBlank { "Minum Obat" }
+                            onAdd(title, hour, minute)
+                            newTitle = ""
+                        },
+                        modifier = Modifier.fillMaxWidth().springBounceClick(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.AlarmAdd, contentDescription = "Tambah")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Simpan Jadwal Pengingat")
                     }
                 }
             }
@@ -767,15 +789,16 @@ fun RemindersTabContent(
         } else {
             items(reminders) { rem ->
                 Card(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.padding(14.dp).fillMaxWidth()
+                        modifier = Modifier.padding(16.dp).fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(

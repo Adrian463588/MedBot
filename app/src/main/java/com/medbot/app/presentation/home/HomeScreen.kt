@@ -19,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +32,7 @@ import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.StatusBannerCard
 import com.medbot.app.core.designsystem.components.springBounceClick
+import com.medbot.app.core.designsystem.theme.*
 import com.medbot.app.domain.agents.AgentRegistry
 import com.medbot.app.domain.model.DoctorAgent
 import com.medbot.app.domain.model.PersonaConfig
@@ -140,14 +142,26 @@ fun HomeScreen(
         topBar = {
             MedBotTopAppBar(
                 title = "MedBot On-Device",
-                subtitle = "Asisten Medis Lokal & Offline RAG",
+                subtitle = "Konsultan Medis AI & Offline RAG",
                 actions = {
-                    IconButton(onClick = onNavigateToPersona, modifier = Modifier.springBounceClick()) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Atur Persona",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    IconButton(
+                        onClick = onNavigateToPersona,
+                        modifier = Modifier.springBounceClick()
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = CircleShape,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "Atur Persona",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -158,8 +172,10 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
         ) {
+            // Status Card with Edge AI Glow
             item {
                 StatusBannerCard(
                     isModelLoaded = isLoaded,
@@ -170,11 +186,13 @@ fun HomeScreen(
                 )
             }
 
-            // Persona Indicator Card
+            // Active Doctor Persona Card
             item {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(14.dp),
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .springBounceClick()
@@ -183,23 +201,25 @@ fun HomeScreen(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.padding(14.dp)
+                        modifier = Modifier.padding(16.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                             Surface(
-                                color = MaterialTheme.colorScheme.primary,
+                                color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = CircleShape,
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier.size(46.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text("🩺", fontSize = 20.sp)
+                                    Text("👨‍⚕️", fontSize = 24.sp)
                                 }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Dokter Aktif: ${activeAgent.displayNameId}",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                    text = "Dokter: ${activeAgent.displayNameId}",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = "${persona.tone.label} • ${persona.depth.label} (${persona.language.displayName})",
@@ -208,16 +228,25 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = "Ubah",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            shape = CircleShape,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = "Ubah",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            // Quick Symptom Triage Input with microinteractions
+            // Quick Symptom Triage Search Bar
             item {
                 Text(
                     text = "Triase Gejala Cepat",
@@ -227,7 +256,14 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = quickQuery,
                     onValueChange = { quickQuery = it },
-                    placeholder = { Text("Ketik keluhan atau gejala sakit Anda...") },
+                    placeholder = { Text("Ketik keluhan Anda (misal: demam 3 hari, ruam gatal)...") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Cari",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    },
                     trailingIcon = {
                         IconButton(
                             onClick = {
@@ -240,22 +276,37 @@ fun HomeScreen(
                             enabled = quickQuery.isNotBlank(),
                             modifier = Modifier.springBounceClick()
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Send,
-                                contentDescription = "Kirim",
-                                tint = if (quickQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                            )
+                            Surface(
+                                color = if (quickQuery.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = CircleShape,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Send,
+                                        contentDescription = "Kirim",
+                                        tint = if (quickQuery.isNotBlank()) Color.White else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
                     },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
 
-            // Feature Quick Action Grid
+            // 2x2 Feature Modules Grid
             item {
                 Text(
-                    text = "Modul Layanan Medis",
+                    text = "Modul Layanan Klinis",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.height(10.dp))
@@ -264,9 +315,9 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    FeatureCard(
+                    FeatureModuleCard(
                         title = "Konsultasi Chat",
-                        desc = "Chatbot 46 Spesialis",
+                        desc = "46 Agen Dokter Spesialis",
                         icon = Icons.Default.ChatBubbleOutline,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f),
@@ -276,9 +327,9 @@ fun HomeScreen(
                             }
                         }
                     )
-                    FeatureCard(
+                    FeatureModuleCard(
                         title = "Skin Lineage",
-                        desc = "Foto & Riwayat Kulit",
+                        desc = "Foto & Riwayat ABCD",
                         icon = Icons.Default.CameraAlt,
                         color = Color(0xFFE67E22),
                         modifier = Modifier.weight(1f),
@@ -292,29 +343,29 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    FeatureCard(
+                    FeatureModuleCard(
                         title = "Knowledge RAG",
                         desc = "Dokumen PDF Medis",
                         icon = Icons.AutoMirrored.Filled.MenuBook,
-                        color = Color(0xFF2980B9),
+                        color = Color(0xFF2563EB),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToKnowledge
                     )
-                    FeatureCard(
+                    FeatureModuleCard(
                         title = "Alat Klinis",
                         desc = "Obat, Lab & Tensi",
                         icon = Icons.Default.MedicalInformation,
-                        color = Color(0xFF27AE60),
+                        color = Color(0xFF059669),
                         modifier = Modifier.weight(1f),
                         onClick = onNavigateToTools
                     )
                 }
             }
 
-            // 46 Specialist Medical Doctors Cluster Selection
+            // 46 Specialist Doctors Cluster
             item {
                 Text(
-                    text = "46 Agen Spesialis Medis Terpadu",
+                    text = "46 Dokter Spesialis Medis",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -326,16 +377,22 @@ fun HomeScreen(
                         FilterChip(
                             selected = selectedCluster == cluster,
                             onClick = { selectedCluster = cluster },
-                            label = { Text(cluster, style = MaterialTheme.typography.labelSmall) }
+                            label = { Text(cluster, style = MaterialTheme.typography.labelSmall) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.primary
+                            ),
+                            modifier = Modifier.springBounceClick()
                         )
                     }
                 }
             }
 
+            // Specialist Doctor Cards
             item {
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
                     items(filteredSpecialists) { agent ->
                         SpecialistCard(
@@ -354,7 +411,7 @@ fun HomeScreen(
 }
 
 @Composable
-fun FeatureCard(
+fun FeatureModuleCard(
     title: String,
     desc: String,
     icon: ImageVector,
@@ -363,12 +420,13 @@ fun FeatureCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = modifier
             .springBounceClick()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .clickable { onClick() }
     ) {
         Column(
@@ -376,16 +434,27 @@ fun FeatureCard(
         ) {
             Surface(
                 color = color.copy(alpha = 0.12f),
-                shape = CircleShape,
-                modifier = Modifier.size(42.dp)
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.size(44.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(imageVector = icon, contentDescription = title, tint = color, modifier = Modifier.size(22.dp))
+                    Icon(imageVector = icon, contentDescription = title, tint = color, modifier = Modifier.size(24.dp))
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
-            Text(text = title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            Text(text = desc, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -395,11 +464,11 @@ fun SpecialistCard(
     agent: DoctorAgent,
     onClick: () -> Unit
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 2.dp,
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier
             .springBounceClick()
             .clickable { onClick() }
@@ -407,19 +476,19 @@ fun SpecialistCard(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-                .widthIn(min = 120.dp, max = 140.dp)
+                .padding(14.dp)
+                .widthIn(min = 130.dp, max = 150.dp)
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 shape = CircleShape,
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(48.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("🩺", fontSize = 22.sp)
+                    Text("🩺", fontSize = 24.sp)
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = agent.displayNameId,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -431,18 +500,19 @@ fun SpecialistCard(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.height(32.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                shape = RoundedCornerShape(6.dp)
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
                     text = "Konsultasi ›",
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
         }

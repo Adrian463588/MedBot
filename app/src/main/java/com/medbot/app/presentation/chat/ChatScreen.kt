@@ -33,6 +33,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.medbot.app.core.designsystem.components.*
+import com.medbot.app.core.designsystem.theme.*
 import com.medbot.app.domain.agents.AgentRegistry
 import com.medbot.app.domain.model.*
 import com.medbot.app.domain.repository.ChatRepository
@@ -120,7 +121,7 @@ class ChatViewModel(
                     _streamingText.value += token
                 }
             } catch (e: Exception) {
-                // Error handled gracefully
+                // Handled gracefully
             } finally {
                 _isGenerating.value = false
                 _streamingText.value = ""
@@ -139,6 +140,14 @@ class ChatViewModel(
         }
     }
 }
+
+val QUICK_SYMPTOMS = listOf(
+    "Demam dan pusing 2 hari",
+    "Perut mual dan nyeri ulu hati",
+    "Ruam merah terasa gatal",
+    "Batuk berdahak dan sesak",
+    "Konsultasi aturan minum obat"
+)
 
 @Composable
 fun ChatScreen(
@@ -224,7 +233,7 @@ fun ChatScreen(
             // Sessions Bar
             if (sessions.size > 1) {
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                 ) {
@@ -255,36 +264,64 @@ fun ChatScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(vertical = 12.dp)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                contentPadding = PaddingValues(vertical = 14.dp)
             ) {
                 if (messages.isEmpty() && !isGenerating) {
                     item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
-                            contentAlignment = Alignment.Center
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().padding(top = 28.dp)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = CircleShape,
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("🩺", fontSize = 36.sp)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = "Konsultasi ${activeAgent.displayNameId}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "Ajukan keluhan kesehatan Anda secara aman & privat.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = "Pertanyaan Medis Populer:",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            QUICK_SYMPTOMS.forEach { prompt ->
                                 Surface(
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    shape = CircleShape,
-                                    modifier = Modifier.size(68.dp)
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp)
+                                        .springBounceClick()
+                                        .clickable { viewModel.sendMessage(prompt) }
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text("🩺", fontSize = 34.sp)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                    ) {
+                                        Text("💬", fontSize = 14.sp)
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(text = prompt, style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Text(
-                                    text = "Konsultasi dengan ${activeAgent.displayNameId}",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                                Text(
-                                    text = "Ajukan keluhan Anda atau lampirkan foto/dokumen untuk dianalisis.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
                     }
@@ -297,20 +334,26 @@ fun ChatScreen(
                     )
                 }
 
-                // Live Streaming Token Bubble
+                // Streaming token bubble
                 if (isGenerating && streamingText.isNotBlank()) {
                     item {
                         StreamingBubbleItem(text = streamingText, agent = activeAgent)
                     }
                 } else if (isGenerating) {
                     item {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(8.dp)
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.padding(4.dp)
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sedang menganalisis secara lokal...", style = MaterialTheme.typography.labelSmall)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Menganalisis data medis secara lokal...", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
@@ -319,10 +362,11 @@ fun ChatScreen(
             // Input Bar
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
+                tonalElevation = 8.dp,
+                shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(10.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     if (selectedImageUri != null) {
                         Surface(
                             color = MaterialTheme.colorScheme.primaryContainer,
@@ -335,7 +379,7 @@ fun ChatScreen(
                             ) {
                                 Icon(Icons.Default.Image, contentDescription = "Foto", modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Citra terlampir: ${File(selectedImageUri!!).name}", style = MaterialTheme.typography.labelSmall)
+                                Text("Foto terlampir: ${File(selectedImageUri!!).name}", style = MaterialTheme.typography.labelSmall)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
                                     Icons.Default.Close,
@@ -356,7 +400,7 @@ fun ChatScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AddPhotoAlternate,
-                                contentDescription = "Lampirkan Citra",
+                                contentDescription = "Lampirkan Foto",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -364,13 +408,19 @@ fun ChatScreen(
                         OutlinedTextField(
                             value = inputText,
                             onValueChange = { inputText = it },
-                            placeholder = { Text("Ketik pesan atau pertanyaan...") },
+                            placeholder = { Text("Tanyakan keluhan kesehatan...") },
                             shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = Color.Transparent
+                            ),
                             modifier = Modifier.weight(1f),
                             maxLines = 4
                         )
 
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         IconButton(
                             onClick = {
@@ -392,13 +442,13 @@ fun ChatScreen(
                             Surface(
                                 color = if ((inputText.isNotBlank() || selectedImageUri != null) && !isGenerating) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                                 shape = CircleShape,
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(44.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Send,
                                         contentDescription = "Kirim",
-                                        tint = if ((inputText.isNotBlank() || selectedImageUri != null) && !isGenerating) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.outline,
+                                        tint = if ((inputText.isNotBlank() || selectedImageUri != null) && !isGenerating) Color.White else MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -409,7 +459,6 @@ fun ChatScreen(
             }
         }
 
-        // Citations Popup
         if (selectedCitationList != null && selectedCitationList!!.isNotEmpty()) {
             CitationsDialog(
                 citations = selectedCitationList!!,
@@ -426,8 +475,8 @@ fun ChatBubbleItem(
 ) {
     val isUser = message.isUser
     val alignment = if (isUser) Alignment.End else Alignment.Start
-    val bg = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val bg = if (isUser) MedicalEmerald else MaterialTheme.colorScheme.surface
+    val textColor = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -455,19 +504,21 @@ fun ChatBubbleItem(
 
         Card(
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp
+                topStart = 18.dp,
+                topEnd = 18.dp,
+                bottomStart = if (isUser) 18.dp else 4.dp,
+                bottomEnd = if (isUser) 4.dp else 18.dp
             ),
             colors = CardDefaults.cardColors(containerColor = bg),
-            modifier = Modifier.widthIn(max = 320.dp)
+            elevation = CardDefaults.cardElevation(defaultElevation = if (isUser) 1.dp else 2.dp),
+            border = if (!isUser) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) else null,
+            modifier = Modifier.widthIn(max = 330.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 if (message.imageUri != null) {
                     Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth().height(140.dp).padding(bottom = 8.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
@@ -482,24 +533,26 @@ fun ChatBubbleItem(
                 MarkdownText(text = message.text, color = textColor)
 
                 if (message.citations.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = textColor.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = textColor.copy(alpha = 0.15f))
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { onCitationClick() }
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onCitationClick() }
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.MenuBook,
                             contentDescription = "Sitasi",
                             modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = if (isUser) Color.White else MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "${message.citations.size} Rujukan Klinis Resmi ›",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.primary
+                            color = if (isUser) Color.White else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -528,11 +581,13 @@ fun StreamingBubbleItem(text: String, agent: DoctorAgent) {
         }
 
         Card(
-            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 4.dp, bottomEnd = 16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.widthIn(max = 320.dp)
+            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 4.dp, bottomEnd = 18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.widthIn(max = 330.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 MarkdownText(text = text)
             }
         }

@@ -43,7 +43,6 @@ import com.medbot.app.core.designsystem.theme.UrgencyEmergencyRed
 import com.medbot.app.core.designsystem.theme.UrgencyHighOrange
 import com.medbot.app.core.designsystem.theme.UrgencyLowGreen
 import com.medbot.app.core.designsystem.theme.UrgencyMediumYellow
-import com.medbot.app.domain.model.BodyPartCategory
 import com.medbot.app.domain.model.SkinRecord
 import com.medbot.app.domain.model.UrgencyLevel
 import com.medbot.app.domain.repository.SkinRepository
@@ -67,7 +66,7 @@ class SkinViewModel(
     val allRecords: StateFlow<List<SkinRecord>> = skinRepository.getAllRecords()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _selectedBodyPart = MutableStateFlow<String>("Semua")
+    private val _selectedBodyPart = MutableStateFlow("Semua")
     val selectedBodyPart: StateFlow<String> = _selectedBodyPart.asStateFlow()
 
     private val _currentAnalysis = MutableStateFlow<SkinRecord?>(null)
@@ -137,7 +136,7 @@ fun SkinScanScreen(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempCameraUri != null) {
-            // Captured image confirmed
+            // Picture captured
         }
     }
 
@@ -161,7 +160,7 @@ fun SkinScanScreen(
         topBar = {
             MedBotTopAppBar(
                 title = "Skin Lineage & Diagnosis",
-                subtitle = "Pemeriksaan Lesi Kulit Berbasis ABCD",
+                subtitle = "Pemeriksaan Lesi Kulit Berbasis Kaidah ABCD",
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
@@ -179,15 +178,18 @@ fun SkinScanScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)
         ) {
-            // Camera / Image View Preview Card
+            // Photo View / Capture Card
             item {
                 Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    modifier = Modifier.fillMaxWidth().height(230.dp)
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().height(240.dp)
                 ) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         if (capturedImagePath != null && File(capturedImagePath!!).exists()) {
@@ -198,38 +200,41 @@ fun SkinScanScreen(
                                 Image(
                                     bitmap = bitmap.asImageBitmap(),
                                     contentDescription = "Foto Lesi Kulit",
-                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(16.dp))
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp))
                                 )
                             }
                         } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(16.dp)
+                            ) {
                                 Surface(
                                     color = MaterialTheme.colorScheme.primaryContainer,
                                     shape = CircleShape,
-                                    modifier = Modifier.size(58.dp)
+                                    modifier = Modifier.size(64.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = Icons.Default.CameraAlt,
                                             contentDescription = "Kamera",
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(30.dp)
+                                            modifier = Modifier.size(32.dp)
                                         )
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Text(
-                                    text = "Posisikan lesi kulit di tengah kamera",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                                    text = "Ambil atau Unggah Foto Lesi Kulit",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
                                 Text(
-                                    text = "Pastikan pencahayaan cukup dan fokus tajam",
+                                    text = "Pastikan foto memiliki pencahayaan cukup dan fokus tajam",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(14.dp))
 
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Button(
                                         onClick = {
                                             val lineageDir = File(context.filesDir, "skin_lineage").apply { if (!exists()) mkdirs() }
@@ -243,17 +248,17 @@ fun SkinScanScreen(
                                                 pickImageLauncher.launch("image/*")
                                             }
                                         },
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         modifier = Modifier.springBounceClick()
                                     ) {
-                                        Icon(Icons.Default.PhotoCamera, contentDescription = "Ambil Foto")
+                                        Icon(Icons.Default.PhotoCamera, contentDescription = "Kamera")
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text("Kamera")
                                     }
 
                                     OutlinedButton(
                                         onClick = { pickImageLauncher.launch("image/*") },
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         modifier = Modifier.springBounceClick()
                                     ) {
                                         Icon(Icons.Default.PhotoLibrary, contentDescription = "Galeri")
@@ -267,7 +272,7 @@ fun SkinScanScreen(
                 }
             }
 
-            // Body Part Selector
+            // Body Part Chips
             item {
                 Text("Bagian Tubuh Terkait", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Spacer(modifier = Modifier.height(8.dp))
@@ -283,19 +288,20 @@ fun SkinScanScreen(
                 }
             }
 
-            // User Notes / Symptoms
+            // User Notes
             item {
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Deskripsi Gejala (Contoh: gatal, bersisik halus, timbul sejak 3 hari)") },
-                    shape = RoundedCornerShape(14.dp),
+                    label = { Text("Deskripsi Gejala") },
+                    placeholder = { Text("Contoh: terasa gatal, kemerahan, muncul sejak 3 hari...") },
+                    shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2
                 )
             }
 
-            // Scan Action Button
+            // Action Button
             item {
                 Button(
                     onClick = {
@@ -304,24 +310,24 @@ fun SkinScanScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .height(54.dp)
                         .springBounceClick(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     enabled = !isAnalyzing
                 ) {
                     if (isAnalyzing) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(modifier = Modifier.width(10.dp))
                         Text("Menganalisis Kaidah ABCD...")
                     } else {
                         Icon(Icons.Default.Analytics, contentDescription = "Diagnosa")
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Diagnosa Kaidah ABCD & Simpan ke Linimasa")
+                        Text("Diagnosa Kaidah ABCD & Simpan")
                     }
                 }
             }
 
-            // Analysis Result Card
+            // Diagnostic Result Card
             if (currentAnalysis != null) {
                 val record = currentAnalysis!!
                 item {
@@ -349,7 +355,7 @@ fun SkinLineageScreen(
         topBar = {
             MedBotTopAppBar(
                 title = "Linimasa Kulit (Skin Lineage)",
-                subtitle = "Pantau Perubahan Lesi Kulit Secara Berkala",
+                subtitle = "Pantau Perkembangan Lesi Kulit Anda",
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.springBounceClick()) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
@@ -368,7 +374,7 @@ fun SkinLineageScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Filter Row
+            // Filter Bar
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -386,19 +392,31 @@ fun SkinLineageScreen(
             if (filteredRecords.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🧴", fontSize = 48.sp)
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = CircleShape,
+                            modifier = Modifier.size(80.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("🧴", fontSize = 40.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Belum Ada Riwayat Foto Kulit",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = "Ambil foto lesi kulit Anda untuk memantau evolusi ABCD.",
+                            text = "Ambil foto lesi kulit Anda untuk mencatat linimasa perkembangan.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = onNavigateToScan, modifier = Modifier.springBounceClick()) {
+                        Spacer(modifier = Modifier.height(18.dp))
+                        Button(
+                            onClick = onNavigateToScan,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.springBounceClick()
+                        ) {
                             Text("Ambil Foto Sekarang")
                         }
                     }
@@ -433,12 +451,13 @@ fun SkinResultCard(record: SkinRecord) {
     }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth().animateContentSize()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -451,7 +470,7 @@ fun SkinResultCard(record: SkinRecord) {
                 UrgencyBadge(urgency = record.urgencyLevel)
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Animated ABCD Risk Meter
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -470,26 +489,26 @@ fun SkinResultCard(record: SkinRecord) {
                         color = riskColor
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { animatedRisk },
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
                     color = riskColor,
                     trackColor = riskColor.copy(alpha = 0.2f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // ABCD Details Breakdown
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Kriteria Morfologi Lesi ABCD:",
+                        text = "Karakteristik Morfologi ABCD:",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -501,17 +520,17 @@ fun SkinResultCard(record: SkinRecord) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Text("Diagnosis Banding Klinis:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
             record.differentialDiagnoses.forEach { dx ->
                 Text("• $dx", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(record.clinicalSummary, style = MaterialTheme.typography.bodySmall)
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Text("Langkah Perawatan Mandiri & Rujukan:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
             record.homeCareAdvice.forEach { adv ->
                 Text("✓ $adv", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -536,12 +555,13 @@ fun SkinLineageTimelineItem(record: SkinRecord, onDelete: () -> Unit) {
     }
 
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth().springBounceClick()
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -553,11 +573,11 @@ fun SkinLineageTimelineItem(record: SkinRecord, onDelete: () -> Unit) {
                     Text(text = dateStr, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
                 }
                 IconButton(onClick = onDelete, modifier = Modifier.size(24.dp).springBounceClick()) {
-                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -579,7 +599,7 @@ fun SkinLineageTimelineItem(record: SkinRecord, onDelete: () -> Unit) {
             )
 
             if (record.userNotes.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Catatan: \"${record.userNotes}\"",
                     style = MaterialTheme.typography.bodySmall,
