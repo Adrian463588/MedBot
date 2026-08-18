@@ -163,6 +163,143 @@ class PaediatricDosingTool : LocalMedicalTool {
     }
 }
 
+class BmiCalculatorTool : LocalMedicalTool {
+    override val name: String = "calculate_bmi"
+    override val description: String = "Menghitung Indeks Massa Tubuh (BMI) dan klasifikasi berat badan WHO Asia-Pasifik"
+
+    override suspend fun execute(params: Map<String, Any>): ToolResult {
+        val weightKg = (params["weight_kg"] as? Number)?.toDouble() ?: 65.0
+        val heightCm = (params["height_cm"] as? Number)?.toDouble() ?: 170.0
+        val heightM = heightCm / 100.0
+
+        val bmi = if (heightM > 0) weightKg / (heightM * heightM) else 0.0
+        val (category, advice) = when {
+            bmi < 18.5 -> "Berat Badan Kurang (Underweight)" to "Tingkatkan asupan kalori bergizi seimbang dan konsultasikan pola makan padat nutrisi."
+            bmi in 18.5..22.9 -> "Berat Badan Normal (Ideal)" to "Pertahankan pola makan seimbang dan aktivitas fisik minimal 150 menit per minggu."
+            bmi in 23.0..24.9 -> "Kelebihan Berat Badan (Overweight)" to "Kurangi konsumsi gula/lemak jenuh dan tingkatkan olahraga aerobik rutin."
+            bmi in 25.0..29.9 -> "Obesitas Tingkat I" to "Batasi kalori harian, targetkan penurunan BB bertahap 0.5-1 kg/minggu, dan periksa profil lipid/gula darah."
+            else -> "Obesitas Tingkat II (Berat)" to "Sangat dianjurkan berkonsultasi dengan dokter/ahli gizi untuk program penurunan berat badan terstruktur."
+        }
+
+        val idealMinWeight = 18.5 * (heightM * heightM)
+        val idealMaxWeight = 22.9 * (heightM * heightM)
+        val summary = "BMI: ${"%.1f".format(bmi)} kg/m² ($category). Rentang BB Ideal: ${"%.1f".format(idealMinWeight)} - ${"%.1f".format(idealMaxWeight)} kg. $advice"
+
+        return ToolResult(
+            toolName = name,
+            isSuccess = true,
+            summary = summary,
+            data = mapOf(
+                "bmi" to bmi,
+                "category" to category,
+                "idealMinWeight" to idealMinWeight,
+                "idealMaxWeight" to idealMaxWeight,
+                "advice" to advice
+            )
+        )
+    }
+}
+
+class DueDateCalculatorTool : LocalMedicalTool {
+    override val name: String = "calculate_due_date"
+    override val description: String = "Menghitung Taksiran Persalinan / Hari Perkiraan Lahir (HPL) dengan Rumus Naegele"
+
+    override suspend fun execute(params: Map<String, Any>): ToolResult {
+        val day = (params["day"] as? Number)?.toInt() ?: 1
+        val month = (params["month"] as? Number)?.toInt() ?: 1
+        val year = (params["year"] as? Number)?.toInt() ?: 2026
+
+        // Naegele's rule: +7 days, -3 months, +1 year (or +7 days, +9 months)
+        val calendar = java.util.Calendar.getInstance().apply {
+            set(year, month - 1, day)
+            add(java.util.Calendar.DAY_OF_MONTH, 7)
+            add(java.util.Calendar.MONTH, 9)
+        }
+
+        val dueDay = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val dueMonth = calendar.get(java.util.Calendar.MONTH) + 1
+        val dueYear = calendar.get(java.util.Calendar.YEAR)
+
+        val monthNames = listOf("", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember")
+        val hplFormatted = "$dueDay ${monthNames.getOrElse(dueMonth) { "" }} $dueYear"
+        val summary = "Taksiran Persalinan (HPL / Naegele): $hplFormatted (Berdasarkan HPHT $day/${month}/$year). Lakukan kontrol kehamilan rutin (ANC) minimal 6 kali."
+
+        return ToolResult(
+            toolName = name,
+            isSuccess = true,
+            summary = summary,
+            data = mapOf(
+                "hplDate" to hplFormatted,
+                "dueDay" to dueDay,
+                "dueMonth" to dueMonth,
+                "dueYear" to dueYear
+            )
+        )
+    }
+}
+
+class LabInterpreterTool : LocalMedicalTool {
+    override val name: String = "interpret_lab_result"
+    override val description: String = "Mengevaluasi nilai laboratorium darah, gula darah, dan fungsi organ"
+
+    override suspend fun execute(params: Map<String, Any>): ToolResult {
+        val testName = (params["test_name"] as? String)?.lowercase() ?: "hemoglobin"
+        val value = (params["value"] as? Number)?.toDouble() ?: 14.0
+
+        val (status, interpretation, normalRange) = when {
+            testName.contains("hemoglobin") || testName.contains("hb") -> {
+                when {
+                    value < 12.0 -> Triple("Rendah (Anemia)", "Kadar hemoglobin di bawah batas normal, mengindikasikan anemia (kekurangan zat besi atau kehilangan darah).", "12.0 - 17.5 g/dL")
+                    value > 17.5 -> Triple("Tinggi (Polisitemia)", "Kadar hemoglobin tinggi, dapat terkait hemokonsentrasi/dehidrasi atau merokok.", "12.0 - 17.5 g/dL")
+                    else -> Triple("Normal", "Kadar hemoglobin dalam batas normal yang sehat.", "12.0 - 17.5 g/dL")
+                }
+            }
+            testName.contains("trombosit") || testName.contains("platelet") -> {
+                when {
+                    value < 150000.0 -> Triple("Rendah (Trombositopenia)", "Waspadai tanda demam berdarah dengue (DBD) atau gangguan pembekuan darah. Amati tanda perdarahan.", "150.000 - 450.000 /µL")
+                    value > 450000.0 -> Triple("Tinggi (Trombositosis)", "Peningkatan sel pembeku darah akibat respon inflamasi atau infeksi.", "150.000 - 450.000 /µL")
+                    else -> Triple("Normal", "Jumlah keping darah dalam rentang normal.", "150.000 - 450.000 /µL")
+                }
+            }
+            testName.contains("leukosit") || testName.contains("wbc") -> {
+                when {
+                    value < 4000.0 -> Triple("Rendah (Leukopenia)", "Kadar sel darah putih rendah; waspadai supresi imun atau infeksi virus fase awal.", "4.000 - 10.000 /µL")
+                    value > 10000.0 -> Triple("Tinggi (Leukositosis)", "Tanda umum adanya infeksi bakteri aktif, radang akut, atau stres fisik tubuh.", "4.000 - 10.000 /µL")
+                    else -> Triple("Normal", "Jumlah leukosit normal.", "4.000 - 10.000 /µL")
+                }
+            }
+            testName.contains("gds") || testName.contains("gula") || testName.contains("glucose") -> {
+                when {
+                    value < 70.0 -> Triple("Rendah (Hipoglikemia)", "Gula darah terlalu rendah! Segera konsumsi 1-2 sendok gula atau teh manis hangat.", "70 - 140 mg/dL")
+                    value > 200.0 -> Triple("Tinggi (Hiperglikemia)", "Gula darah sewaktu sangat tinggi, mengindikasikan diabetes yang belum terkontrol.", "70 - 140 mg/dL")
+                    value in 140.0..199.0 -> Triple("Perhatian (Toleransi Glukosa Terganggu)", "Nilai di atas normal sewaktu, disarankan tes GDP dan HbA1c konfirmasi.", "70 - 140 mg/dL")
+                    else -> Triple("Normal", "Kadar gula darah sewaktu normal.", "70 - 140 mg/dL")
+                }
+            }
+            testName.contains("asam urat") || testName.contains("uric") -> {
+                when {
+                    value > 7.0 -> Triple("Tinggi (Hiperurisemia)", "Asam urat tinggi dapat memicu radang sendi gout akut dan pembentukan kristal ginjal. Batasi jeroan dan emping.", "3.5 - 7.0 mg/dL")
+                    else -> Triple("Normal", "Kadar asam urat dalam batas aman.", "3.5 - 7.0 mg/dL")
+                }
+            }
+            else -> Triple("Tercatat", "Hasil tes $testName terukur $value. Konsultasikan rentang rujukan spesifik lab Anda dengan dokter.", "Sesuai rujukan lab")
+        }
+
+        val summary = "Evaluasi Lab: $testName = $value (Status: $status, Rujukan: $normalRange). $interpretation"
+
+        return ToolResult(
+            toolName = name,
+            isSuccess = true,
+            summary = summary,
+            data = mapOf(
+                "testName" to testName,
+                "value" to value,
+                "status" to status,
+            )
+        )
+    }
+}
+
 class SkinAbcdEvaluatorTool : LocalMedicalTool {
     override val name: String = "evaluate_skin_abcd"
     override val description: String = "Menilai risiko keganasan lesi kulit berdasarkan kriteria ABCD"
@@ -199,3 +336,5 @@ class SkinAbcdEvaluatorTool : LocalMedicalTool {
         )
     }
 }
+
+

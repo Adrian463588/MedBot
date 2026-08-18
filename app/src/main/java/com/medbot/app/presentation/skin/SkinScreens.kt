@@ -305,20 +305,25 @@ fun SkinScanScreen(
             item {
                 Button(
                     onClick = {
-                        val path = capturedImagePath ?: File(context.filesDir, "skin_lineage/sample.jpg").absolutePath
-                        viewModel.analyzeAndSave(path, selectedPart, notes)
+                        if (capturedImagePath != null) {
+                            viewModel.analyzeAndSave(capturedImagePath!!, selectedPart, notes)
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
                         .springBounceClick(),
                     shape = RoundedCornerShape(14.dp),
-                    enabled = !isAnalyzing
+                    enabled = !isAnalyzing && capturedImagePath != null
                 ) {
                     if (isAnalyzing) {
                         CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(modifier = Modifier.width(10.dp))
                         Text("Menganalisis Kaidah ABCD...")
+                    } else if (capturedImagePath == null) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = "Ambil Foto Dulu")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Ambil / Pilih Foto Terlebih Dahulu")
                     } else {
                         Icon(Icons.Default.Analytics, contentDescription = "Diagnosa")
                         Spacer(modifier = Modifier.width(8.dp))
@@ -427,6 +432,27 @@ fun SkinLineageScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    // If multiple records exist, show Split Comparator on Top
+                    if (filteredRecords.size >= 2) {
+                        item {
+                            val oldest = filteredRecords.last()
+                            val newest = filteredRecords.first()
+                            val beforeBitmap = remember(oldest.imagePath) {
+                                if (File(oldest.imagePath).exists()) BitmapFactory.decodeFile(oldest.imagePath) else null
+                            }
+                            val afterBitmap = remember(newest.imagePath) {
+                                if (File(newest.imagePath).exists()) BitmapFactory.decodeFile(newest.imagePath) else null
+                            }
+
+                            com.medbot.app.core.designsystem.components.InteractiveSkinSplitComparator(
+                                beforeBitmap = beforeBitmap,
+                                afterBitmap = afterBitmap,
+                                beforeLabel = "Awal (${oldest.bodyPart})",
+                                afterLabel = "Terbaru (${newest.bodyPart})"
+                            )
+                        }
+                    }
+
                     items(filteredRecords) { record ->
                         SkinLineageTimelineItem(record = record, onDelete = { viewModel.deleteRecord(record.id) })
                     }

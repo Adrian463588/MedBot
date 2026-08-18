@@ -40,12 +40,26 @@ import com.medbot.app.core.designsystem.theme.*
 import com.medbot.app.domain.model.Citation
 import com.medbot.app.domain.model.UrgencyLevel
 
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.graphics.asImageBitmap
+
 /**
- * Microinteraction modifier: Bouncing scale animation on touch press with haptic-like feel.
+ * Microinteraction modifier: Bouncing scale animation on touch press with tactile haptic feedback.
  */
 fun Modifier.springBounceClick(scaleDown: Float = 0.94f): Modifier = Modifier.composed {
+    val haptic = LocalHapticFeedback.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+            try {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            } catch (_: Exception) {}
+        }
+    }
+
     val scale by animateFloatAsState(
         targetValue = if (isPressed) scaleDown else 1f,
         animationSpec = spring(
@@ -467,3 +481,189 @@ fun MarkdownText(
         }
     }
 }
+
+/**
+ * Animated Streaming Typewriter Text with blinking cursor
+ */
+@Composable
+fun StreamingTypewriterText(
+    text: String,
+    isGenerating: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurface
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "cursor")
+    val cursorAlpha by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cursorBlink"
+    )
+
+    Column(modifier = modifier) {
+        MarkdownText(text = text, color = color)
+        if (isGenerating) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 8.dp, height = 16.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = cursorAlpha),
+                            shape = RoundedCornerShape(2.dp)
+                        )
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Gemma AI Sedang Mengetik...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Interactive Skin Split Slider Comparator for Before-After Lesion Analysis
+ */
+@Composable
+fun InteractiveSkinSplitComparator(
+    beforeBitmap: android.graphics.Bitmap?,
+    afterBitmap: android.graphics.Bitmap?,
+    beforeLabel: String = "Hari ke-1 (Sebelum)",
+    afterLabel: String = "Hari ini (Terkini)",
+    modifier: Modifier = Modifier
+) {
+    var splitRatio by remember { mutableFloatStateOf(0.5f) }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🔍", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Komparasi Split Slider Linimasa",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "${(splitRatio * 100).toInt()}% Split",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Visual Before-After Split Canvas
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    // Left (Before) Image
+                    Box(
+                        modifier = Modifier
+                            .weight(splitRatio.coerceIn(0.1f, 0.9f))
+                            .fillMaxHeight()
+                            .background(Color(0xFFE2E8F0)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (beforeBitmap != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = beforeBitmap.asImageBitmap(),
+                                contentDescription = beforeLabel,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("📸", fontSize = 28.sp)
+                                Text(beforeLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    // Split Divider Line
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+
+                    // Right (After) Image
+                    Box(
+                        modifier = Modifier
+                            .weight((1f - splitRatio).coerceIn(0.1f, 0.9f))
+                            .fillMaxHeight()
+                            .background(Color(0xFFCBD5E1)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (afterBitmap != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = afterBitmap.asImageBitmap(),
+                                contentDescription = afterLabel,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                            )
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🔬", fontSize = 28.sp)
+                                Text(afterLabel, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Draggable Slider
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(beforeLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(afterLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+            }
+
+            Slider(
+                value = splitRatio,
+                onValueChange = { splitRatio = it },
+                valueRange = 0.05f..0.95f,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            )
+        }
+    }
+}
+

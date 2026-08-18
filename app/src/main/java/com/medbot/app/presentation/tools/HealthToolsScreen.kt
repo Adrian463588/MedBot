@@ -719,6 +719,92 @@ fun CalculatorTabContent() {
                 }
             }
         }
+
+        // Pregnancy Due Date (Naegele) Calculator
+        item {
+            var hphtDay by remember { mutableStateOf("15") }
+            var hphtMonth by remember { mutableStateOf("8") }
+            var hphtYear by remember { mutableStateOf("2026") }
+            var dueDateResult by remember { mutableStateOf<String?>(null) }
+
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text(
+                        text = "🤰 Kalkulator Taksiran Persalinan (HPL / Naegele)",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Masukkan Hari Pertama Haid Terakhir (HPHT)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = hphtDay,
+                            onValueChange = { hphtDay = it },
+                            label = { Text("Tanggal") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        OutlinedTextField(
+                            value = hphtMonth,
+                            onValueChange = { hphtMonth = it },
+                            label = { Text("Bulan") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        OutlinedTextField(
+                            value = hphtYear,
+                            onValueChange = { hphtYear = it },
+                            label = { Text("Tahun") },
+                            modifier = Modifier.weight(1.2f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            val d = hphtDay.toIntOrNull() ?: 1
+                            val m = hphtMonth.toIntOrNull() ?: 1
+                            val y = hphtYear.toIntOrNull() ?: 2026
+                            val tool = com.medbot.app.domain.agents.tools.DueDateCalculatorTool()
+                            kotlinx.coroutines.runBlocking {
+                                val res = tool.execute(mapOf("day" to d, "month" to m, "year" to y))
+                                dueDateResult = res.summary
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().springBounceClick(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Hitung Taksiran Persalinan (HPL)")
+                    }
+
+                    if (dueDateResult != null) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = dueDateResult!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -730,8 +816,8 @@ fun RemindersTabContent(
     onDelete: (String) -> Unit
 ) {
     var newTitle by remember { mutableStateOf("") }
-    var hour by remember { mutableStateOf(8) }
-    var minute by remember { mutableStateOf(0) }
+    var hour by remember { mutableIntStateOf(8) }
+    var minute by remember { mutableIntStateOf(0) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -759,6 +845,28 @@ fun RemindersTabContent(
                         shape = RoundedCornerShape(12.dp)
                     )
                     Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Jam: %02d:%02d".format(hour, minute),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(6, 8, 12, 14, 18, 20, 22).forEach { h ->
+                                FilterChip(
+                                    selected = hour == h,
+                                    onClick = { hour = h },
+                                    label = { Text("%02d:00".format(h)) },
+                                    modifier = Modifier.springBounceClick()
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
                             val title = newTitle.ifBlank { "Minum Obat" }

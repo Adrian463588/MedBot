@@ -205,6 +205,7 @@ fun ChatScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.ime,
         topBar = {
             MedBotTopAppBar(
                 title = activeAgent.displayNameId,
@@ -588,7 +589,7 @@ fun StreamingBubbleItem(text: String, agent: DoctorAgent) {
             modifier = Modifier.widthIn(max = 330.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                MarkdownText(text = text)
+                StreamingTypewriterText(text = text, isGenerating = true)
             }
         }
     }

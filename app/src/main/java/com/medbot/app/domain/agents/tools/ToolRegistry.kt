@@ -5,7 +5,10 @@ object ToolRegistry {
         UrgencyAssessorTool(),
         ZScoreCalculatorTool(),
         PaediatricDosingTool(),
-        SkinAbcdEvaluatorTool()
+        SkinAbcdEvaluatorTool(),
+        BmiCalculatorTool(),
+        DueDateCalculatorTool(),
+        LabInterpreterTool()
     ).associateBy { it.name }
 
     fun getTool(name: String): LocalMedicalTool? = toolsMap[name]

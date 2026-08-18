@@ -180,6 +180,32 @@ class LlmInferenceEngine(private val context: Context) {
                 }
             }
 
+            // Include RAG excerpts if present in systemPrompt
+            if (systemPrompt.contains("DOKUMEN PANDUAN KLINIS RESMI (RAG CONTEXT):")) {
+                val ragSegment = systemPrompt.substringAfter("DOKUMEN PANDUAN KLINIS RESMI (RAG CONTEXT):")
+                    .substringBefore("SPESIALISASI DOKTER:")
+                    .substringBefore("GAYA KOMUNIKASI:")
+                    .trim()
+                if (ragSegment.isNotBlank()) {
+                    response.append("\n\n### 📚 Fakta Klinis Berdasarkan Dokumen Rujukan (RAG):\n")
+                    val lines = ragSegment.lines().filter { it.isNotBlank() && !it.startsWith("(") }.take(4)
+                    lines.forEach { line ->
+                        response.append("• ${line.trim()}\n")
+                    }
+                }
+            }
+
+            // Include tool execution results if present in systemPrompt
+            if (systemPrompt.contains("[Hasil Perhitungan")) {
+                val toolLines = systemPrompt.lines().filter { it.contains("[Hasil Perhitungan") }
+                if (toolLines.isNotEmpty()) {
+                    response.append("\n\n### ⚙️ Hasil Komputasi Deterministic Tools:\n")
+                    toolLines.forEach { line ->
+                        response.append("• ${line.trim()}\n")
+                    }
+                }
+            }
+
             response.append("\n\n---\n")
             response.append("💡 *Saran Tindakan:* Istirahat cukup • Penuhi cairan tubuh • Periksa ke faskes jika tidak membaik dalam 3 hari.")
         } else {
@@ -189,6 +215,13 @@ class LlmInferenceEngine(private val context: Context) {
             response.append("1. **Supportive Care**: Ensure adequate hydration (2-2.5L water daily) and sufficient rest.\n")
             response.append("2. **Symptom Monitoring**: Observe if symptoms worsen over the next 24-48 hours.\n")
             response.append("3. **Medication Safety**: Use over-the-counter medications strictly according to package instructions.\n\n")
+            
+            if (systemPrompt.contains("DOKUMEN PANDUAN KLINIS RESMI (RAG CONTEXT):")) {
+                response.append("\n### 📚 Clinical Guidelines Evidence (RAG):\n")
+                val ragSegment = systemPrompt.substringAfter("DOKUMEN PANDUAN KLINIS RESMI (RAG CONTEXT):").take(250)
+                response.append("• Grounded on loaded official medical guidelines: $ragSegment\n")
+            }
+
             response.append("⚠️ **Emergency Red Flags**: Seek immediate medical care if you experience severe shortness of breath, acute chest pressure, sudden numbness, or persistent high fever.\n\n")
             response.append("---\n*General guidance based on evidence-based clinical guidelines. Please consult a physician for in-person diagnosis.*")
         }

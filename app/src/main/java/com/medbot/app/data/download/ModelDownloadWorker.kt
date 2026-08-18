@@ -86,29 +86,13 @@ class ModelDownloadWorker(
                             KEY_TOTAL to totalBytes,
                             KEY_STATUS to "DOWNLOADING"
                         ))
-                        lastProgressUpdate = now
                     }
                 }
                 outputStream.flush()
                 outputStream.close()
             } else {
-                // Fallback simulation when network endpoint is not directly reachable in test
-                while (downloadedBytes < totalBytes) {
-                    if (isStopped) return@withContext Result.retry()
-                    val step = (totalBytes / 40).coerceAtLeast(1024 * 1024)
-                    downloadedBytes = (downloadedBytes + step).coerceAtMost(totalBytes)
-                    outputStream.write(ByteArray(1024))
-                    val progressPercent = ((downloadedBytes.toDouble() / totalBytes.toDouble()) * 100.0).toInt()
-                    setProgress(workDataOf(
-                        KEY_PROGRESS to progressPercent,
-                        KEY_BYTES to downloadedBytes,
-                        KEY_TOTAL to totalBytes,
-                        KEY_STATUS to "DOWNLOADING"
-                    ))
-                    kotlinx.coroutines.delay(100)
-                }
-                outputStream.flush()
                 outputStream.close()
+                return@withContext Result.failure(workDataOf(KEY_ERROR to "Response body kosong dari server"))
             }
 
             // Atomic rename
