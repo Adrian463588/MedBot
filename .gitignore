@@ -1,17 +1,68 @@
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Gradle and Build Files
+.gradle/
+build/
+**/build/
+app/build/
 *.iml
-.gradle
+.cxx/
+.externalNativeBuild/
+captures/
+
+# Local Environment and Secrets
+local.properties
 /local.properties
+secrets.xml
+google-services.json
+*.jks
+*.keystore
+*.key
+*.pem
+*.p12
+*.cer
+*.crt
+
+# IDE Files
+.idea/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+.vscode/
+
+# OS and Scratch Files
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-app/build/
-**/build/
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+
+# AI Model Files & Weights (Local-only, user-managed via SAF / Downloader)
+*.litertlm
+*.litertlm.part
+*.tflite
+*.bin
+*.gguf
+*.onnx
+
+# Native Libraries & Binaries
+*.so
+*.dll
+*.dylib
+
+# DevSecOps: Exclude Internal References & Reference Projects
+docs/REFERENCES/
+docs/MDFILE/
+docs/AntiSlop/
+docs/e2e/device/
+docs/e2e/reports/
+docs/e2e/journeys/
+docs/traceability.md
+
