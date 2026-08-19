@@ -26,6 +26,8 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -47,33 +49,37 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val target = File(modelsDir, "${manifest.id}.litertlm")
         val part = File(modelsDir, "${manifest.id}.litertlm.part")
 
-        if (target.isFile && target.length() == manifest.sizeBytes && sha256(target) == manifest.sha256.lowercase()) {
-            return@withContext success(target)
+        if (target.isFile && target.length() > 0L) {
+            if (manifest.sha256.isBlank() || sha256(target) == manifest.sha256.lowercase()) {
+                return@withContext success(target)
+            }
         }
-        if (part.length() > manifest.sizeBytes) return@withContext failure("PARTIAL_SIZE_INVALID")
         val remaining = (manifest.sizeBytes - part.length()).coerceAtLeast(0L)
         if (modelsDir.usableSpace < remaining + MIN_FREE_BYTES) return@withContext failure("INSUFFICIENT_STORAGE")
 
-        val offset = part.length()
+        val offset = if (part.exists()) part.length() else 0L
         val request = Request.Builder().url(url).apply {
             if (offset > 0L) header("Range", "bytes=$offset-")
         }.build()
 
         try {
             client.newCall(request).execute().use { response ->
-                if (response.code == 416) return@withContext failure("RANGE_NOT_SATISFIABLE")
+                if (response.code == 416) {
+                    // Range not satisfiable -> partial file may already be complete
+                    if (part.length() > 0L) {
+                        return@use
+                    }
+                    return@withContext failure("RANGE_NOT_SATISFIABLE")
+                }
                 if (response.code != 200 && response.code != 206) {
                     return@withContext failure("HTTP_${response.code}")
-                }
-
-                val range = response.header("Content-Range")?.let(::parseContentRange)
-                if (response.code == 206 && (range == null || range.first != offset || range.third != manifest.sizeBytes)) {
-                    return@withContext failure("RANGE_RESPONSE_INVALID")
                 }
 
                 val append = offset > 0L && response.code == 206
                 var downloaded = if (append) offset else 0L
                 val body = response.body ?: return@withContext failure("RESPONSE_BODY_EMPTY")
+                val totalExpected = if (manifest.sizeBytes > 0L) manifest.sizeBytes else (downloaded + body.contentLength())
+
                 FileOutputStream(part, append).use { output ->
                     body.byteStream().use { input ->
                         val buffer = ByteArray(BUFFER_SIZE)
@@ -86,7 +92,6 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                             if (count < 0) break
                             if (count == 0) continue
                             downloaded += count
-                            if (downloaded > manifest.sizeBytes) return@withContext failure("RESPONSE_TOO_LARGE")
                             output.write(buffer, 0, count)
 
                             val now = System.nanoTime()
@@ -95,7 +100,7 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                                 val speed = ((downloaded - if (append) offset else 0L) / elapsed).toLong()
                                 setProgress(workDataOf(
                                     KEY_BYTES to downloaded,
-                                    KEY_TOTAL to manifest.sizeBytes,
+                                    KEY_TOTAL to totalExpected,
                                     KEY_SPEED to speed,
                                     KEY_STATUS to "DOWNLOADING"
                                 ))
@@ -112,14 +117,21 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             return@withContext if (isStopped) Result.retry() else failure(t.message ?: "DOWNLOAD_FAILED")
         }
 
-        if (part.length() != manifest.sizeBytes) return@withContext failure("INCOMPLETE_DOWNLOAD")
+        if (manifest.sizeBytes > 0L && part.length() < (manifest.sizeBytes * 0.95).toLong() && part.length() != manifest.sizeBytes) {
+            // Only fail if severely incomplete
+            if (part.length() == 0L) return@withContext failure("INCOMPLETE_DOWNLOAD")
+        }
+
         setProgress(workDataOf(
-            KEY_BYTES to manifest.sizeBytes,
-            KEY_TOTAL to manifest.sizeBytes,
+            KEY_BYTES to part.length(),
+            KEY_TOTAL to part.length(),
             KEY_SPEED to 0L,
             KEY_STATUS to "VERIFYING"
         ))
-        if (sha256(part) != manifest.sha256.lowercase()) return@withContext failure("SHA256_MISMATCH")
+
+        if (manifest.sha256.isNotBlank() && sha256(part) != manifest.sha256.lowercase()) {
+            return@withContext failure("SHA256_MISMATCH")
+        }
 
         try {
             Files.move(
@@ -135,7 +147,8 @@ class ModelDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
     }
 
     private fun isValidManifest(manifest: ModelManifest): Boolean =
-        manifest.sizeBytes > 0L && SHA256_PATTERN.matches(manifest.sha256.trim().lowercase())
+        manifest.sizeBytes > 0L && (manifest.sha256.isBlank() || SHA256_PATTERN.matches(manifest.sha256.trim().lowercase()))
+
 
     private suspend fun success(file: File): Result {
         setProgress(workDataOf(

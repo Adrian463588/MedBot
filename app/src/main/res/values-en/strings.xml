@@ -263,4 +263,17 @@
     <string name="tools_calculator_result">A calculator result is available from explicit inputs. Review it with a health professional.</string>
     <string name="tools_bmi_result">BMI: %1$.1f (%2$s). This is a screening calculation, not a diagnosis.</string>
     <string name="tools_due_date_result">Estimated due date by calendar formula: %1$s. This is not a pregnancy assessment.</string>
+    <string name="models_tab_all">All</string>
+    <string name="models_tab_llm">LLM Models</string>
+    <string name="models_tab_vision">Vision Models</string>
+    <string name="models_custom_heading">Download Custom Model URL</string>
+    <string name="models_custom_url_label">HTTPS Download URL (.litertlm)</string>
+    <string name="models_custom_name_label">Model Name</string>
+    <string name="models_custom_vision_checkbox">Supports Vision / Images</string>
+    <string name="models_custom_add_button">Add to Catalogue</string>
+    <string name="models_custom_added">Custom model successfully added to download catalogue.</string>
+    <string name="models_speed_format">%1$s/s</string>
+    <string name="models_recommend_tag">Recommended</string>
+    <string name="models_vision_tag">Vision</string>
+    <string name="models_multimodal_tag">Multimodal</string>
 </resources>

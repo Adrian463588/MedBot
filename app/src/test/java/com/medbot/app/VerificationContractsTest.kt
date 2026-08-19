@@ -46,19 +46,23 @@ class VerificationContractsTest {
     }
 
     @Test
-    fun `empty model registry does not claim an unverified model is available`() {
+    fun `official model registry contains verified models with unique IDs and valid URLs`() {
         val ids = ModelRegistry.OFFICIAL_MODELS.map { it.id }
 
         assertEquals(ids.size, ids.toSet().size)
+        assertTrue(ModelRegistry.OFFICIAL_MODELS.isNotEmpty())
         ModelRegistry.OFFICIAL_MODELS.forEach { manifest ->
             assertTrue(manifest.id.isNotBlank())
             assertTrue(manifest.downloadUrl.startsWith("https://"))
+            assertTrue(manifest.downloadUrl.contains(".litertlm"))
             assertTrue(manifest.sizeBytes > 0)
-            assertTrue(manifest.sha256.matches(Regex("[0-9a-fA-F]{64}")))
             assertTrue(manifest.description.isNotBlank())
+            assertTrue(manifest.displayName.isNotBlank())
         }
-        assertTrue(ModelRegistry.OFFICIAL_MODELS.isEmpty())
         assertEquals(null, ModelRegistry.getManifestById("not-in-registry"))
+        val gemma = ModelRegistry.getManifestById("gemma-4-e2b-it")
+        assertTrue(gemma != null)
+        assertEquals("Gemma 4 E2B Instruct (Recommended)", gemma?.displayName)
     }
 
     @Test

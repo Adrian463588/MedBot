@@ -137,11 +137,11 @@ class ModelRepositoryImpl(
     override val activeModelName = llmEngine.activeModelName
 
     override fun getInstalledModels(): Flow<List<ModelManifest>> {
-        return kotlinx.coroutines.flow.flowOf(ModelRegistry.OFFICIAL_MODELS)
+        return kotlinx.coroutines.flow.flowOf(ModelRegistry.getAllModels())
     }
 
     override fun getAvailableOnlineModels(): List<ModelManifest> {
-        return ModelRegistry.OFFICIAL_MODELS
+        return ModelRegistry.getAllModels()
     }
 
     override fun getDownloadProgress(modelId: String): Flow<DownloadProgress?> {

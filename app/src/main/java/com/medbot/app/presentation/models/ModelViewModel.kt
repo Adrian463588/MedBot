@@ -3,7 +3,10 @@ package com.medbot.app.presentation.models
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.domain.model.DownloadProgress
+import com.medbot.app.domain.model.ModelFormat
+import com.medbot.app.domain.model.ModelManifest
 import com.medbot.app.domain.repository.ModelRepository
 import com.medbot.app.domain.repository.ModelFileGateway
 import com.medbot.app.domain.repository.UserPreferencesRepository
@@ -25,9 +28,10 @@ sealed interface ModelUiEvent {
     data class DeleteModel(val modelId: String) : ModelUiEvent
     data class LoadModel(val path: String) : ModelUiEvent
     data object UnloadModel : ModelUiEvent
+    data class AddCustomModel(val name: String, val url: String, val isVision: Boolean) : ModelUiEvent
 }
 
-enum class ModelMessageKind { LOADED, UNAVAILABLE, UNLOADED, DELETED, PERMISSION_REQUIRED }
+enum class ModelMessageKind { LOADED, UNAVAILABLE, UNLOADED, DELETED, PERMISSION_REQUIRED, CUSTOM_ADDED }
 
 data class ModelMessage(val kind: ModelMessageKind)
 
@@ -37,7 +41,9 @@ class ModelViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val modelFileGateway: ModelFileGateway
 ) : ViewModel() {
-    val availableModels = modelRepository.getAvailableOnlineModels()
+    private val _modelsList = MutableStateFlow(ModelRegistry.getAllModels())
+    val availableModels: StateFlow<List<ModelManifest>> = _modelsList.asStateFlow()
+
     val safFolderUri: StateFlow<String?> = userPreferencesRepository.safModelFolderUri
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -69,10 +75,31 @@ class ModelViewModel @Inject constructor(
             is ModelUiEvent.DeleteModel -> deleteModel(event.modelId)
             is ModelUiEvent.LoadModel -> loadModel(event.path)
             ModelUiEvent.UnloadModel -> unloadModel()
+            is ModelUiEvent.AddCustomModel -> addCustomModel(event.name, event.url, event.isVision)
         }
     }
 
     fun selectBackend(backend: String) { _selectedBackend.value = backend }
+
+    fun addCustomModel(name: String, url: String, isVision: Boolean) {
+        val id = "custom-${System.currentTimeMillis()}"
+        val manifest = ModelManifest(
+            id = id,
+            displayName = name.ifBlank { "Custom Model" },
+            version = "1.0",
+            format = ModelFormat.LITERTLM,
+            downloadUrl = url.trim(),
+            sizeBytes = 0L,
+            sha256 = "",
+            minimumRamMb = 2048,
+            isMultimodal = isVision,
+            recommendedBackend = if (isVision) "GPU" else "AUTO",
+            description = "Custom user-provided LiteRT model URL."
+        )
+        ModelRegistry.registerCustomManifest(manifest)
+        _modelsList.value = ModelRegistry.getAllModels()
+        _modelMessage.value = ModelMessage(ModelMessageKind.CUSTOM_ADDED)
+    }
 
     fun startDownload(modelId: String) = viewModelScope.launch { modelRepository.startDownload(modelId) }
     fun pauseDownload(modelId: String) = viewModelScope.launch { modelRepository.pauseDownload(modelId) }
@@ -122,3 +149,4 @@ class ModelViewModel @Inject constructor(
 
     fun installedModelPath(modelId: String): String? = modelRepository.getInstalledModelPath(modelId)
 }
+

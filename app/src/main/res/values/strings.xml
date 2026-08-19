@@ -263,4 +263,17 @@
     <string name="tools_calculator_result">Hasil kalkulator tersedia dari input eksplisit. Tinjau dengan tenaga kesehatan.</string>
     <string name="tools_bmi_result">BMI: %1$.1f (%2$s). Ini perhitungan skrining, bukan diagnosis.</string>
     <string name="tools_due_date_result">HPL berdasarkan rumus kalender: %1$s. Ini bukan penilaian kehamilan.</string>
+    <string name="models_tab_all">Semua</string>
+    <string name="models_tab_llm">Model LLM</string>
+    <string name="models_tab_vision">Model Vision</string>
+    <string name="models_custom_heading">Unduh URL Model Kustom</string>
+    <string name="models_custom_url_label">URL Unduhan HTTPS (.litertlm)</string>
+    <string name="models_custom_name_label">Nama Model</string>
+    <string name="models_custom_vision_checkbox">Model Mendukung Citra (Vision)</string>
+    <string name="models_custom_add_button">Tambahkan ke Katalog</string>
+    <string name="models_custom_added">Model kustom berhasil ditambahkan ke katalog unduhan.</string>
+    <string name="models_speed_format">%1$s/dtk</string>
+    <string name="models_recommend_tag">Disarankan</string>
+    <string name="models_vision_tag">Vision</string>
+    <string name="models_multimodal_tag">Multimodal</string>
 </resources>
