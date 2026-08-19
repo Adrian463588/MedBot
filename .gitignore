@@ -57,7 +57,9 @@ Thumbs.db
 *.dll
 *.dylib
 
-# DevSecOps: Exclude Internal References & Reference Projects
+# DevSecOps: Exclude Internal References, Docs Markdown & Reference Projects
+docs/**/*.md
+docs/*.md
 docs/REFERENCES/
 docs/MDFILE/
 docs/AntiSlop/
