@@ -278,4 +278,14 @@
     <string name="models_recommend_tag">Disarankan</string>
     <string name="models_vision_tag">Vision</string>
     <string name="models_multimodal_tag">Multimodal</string>
+    <string name="tools_calc_subtab_bmi">BMI</string>
+    <string name="tools_calc_subtab_due_date">HPL</string>
+    <string name="tools_calc_subtab_paediatric">Pediatrik</string>
+    <string name="tools_day_hint">Hari (1–31)</string>
+    <string name="tools_month_hint">Bulan (1–12)</string>
+    <string name="tools_year_hint">Tahun (YYYY)</string>
+    <string name="gender_male">Laki-laki</string>
+    <string name="gender_female">Perempuan</string>
+    <string name="tools_select_calculator">Pilih Kalkulator</string>
+    <string name="tools_result_heading">Hasil Kalkulasi</string>
 </resources>

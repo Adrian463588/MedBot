@@ -278,4 +278,14 @@
     <string name="models_recommend_tag">Recommended</string>
     <string name="models_vision_tag">Vision</string>
     <string name="models_multimodal_tag">Multimodal</string>
+    <string name="tools_calc_subtab_bmi">BMI</string>
+    <string name="tools_calc_subtab_due_date">Due Date</string>
+    <string name="tools_calc_subtab_paediatric">Paediatric</string>
+    <string name="tools_day_hint">Day (1–31)</string>
+    <string name="tools_month_hint">Month (1–12)</string>
+    <string name="tools_year_hint">Year (YYYY)</string>
+    <string name="gender_male">Male</string>
+    <string name="gender_female">Female</string>
+    <string name="tools_select_calculator">Select Calculator</string>
+    <string name="tools_result_heading">Calculation Result</string>
 </resources>
