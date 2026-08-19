@@ -1,6 +1,7 @@
 package com.medbot.app.data.repository
 
 import com.medbot.app.data.ai.LlmInferenceEngine
+import com.medbot.app.data.ai.ModelLoadResult as EngineModelLoadResult
 import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.data.download.ModelDownloadManager
 import com.medbot.app.data.local.dao.*
@@ -8,8 +9,10 @@ import com.medbot.app.data.local.entities.*
 import com.medbot.app.data.rag.RagOrchestrator
 import com.medbot.app.domain.model.*
 import com.medbot.app.domain.repository.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.InputStream
 
 class ChatRepositoryImpl(
@@ -149,23 +152,33 @@ class ModelRepositoryImpl(
     }
 
     override suspend fun startDownload(modelId: String) {
-        downloadManager.startDownload(modelId)
+        withContext(Dispatchers.IO) {
+            downloadManager.startDownload(modelId)
+        }
     }
 
     override suspend fun pauseDownload(modelId: String) {
-        downloadManager.pauseDownload(modelId)
+        withContext(Dispatchers.IO) {
+            downloadManager.pauseDownload(modelId)
+        }
     }
 
     override suspend fun resumeDownload(modelId: String) {
-        downloadManager.startDownload(modelId)
+        withContext(Dispatchers.IO) {
+            downloadManager.startDownload(modelId)
+        }
     }
 
     override suspend fun cancelDownload(modelId: String) {
-        downloadManager.cancelDownload(modelId)
+        withContext(Dispatchers.IO) {
+            downloadManager.cancelDownload(modelId)
+        }
     }
 
     override suspend fun deleteModel(modelId: String) {
-        downloadManager.deleteModel(modelId)
+        withContext(Dispatchers.IO) {
+            downloadManager.deleteModel(modelId)
+        }
     }
 
     override fun getInstalledModelPath(modelId: String): String? =
@@ -175,6 +188,23 @@ class ModelRepositoryImpl(
         return llmEngine.loadModel(modelPath, backend)
     }
 
+    override suspend fun loadVerifiedModelToRam(modelId: String, backend: String): ModelLoadResult {
+        val manifest = ModelRegistry.getManifestById(modelId)
+            ?: return ModelLoadResult.Unavailable("MODEL_UNAVAILABLE", "No verified model manifest is available")
+        val modelUri = downloadManager.getInstalledModelPath(modelId)
+            ?: return ModelLoadResult.Unavailable("MODEL_NOT_READY", "The verified model file is not available in SAF storage")
+        return llmEngine.loadModelResult(
+            path = modelUri,
+            backend = backend,
+            expectedSizeBytes = manifest.sizeBytes,
+            expectedSha256 = manifest.sha256,
+            requiresVision = manifest.requiresVision
+        ).toDomainResult()
+    }
+
+    override suspend fun loadImportedModelToRam(modelUri: String, backend: String): ModelLoadResult =
+        llmEngine.loadModelResult(path = modelUri, backend = backend).toDomainResult()
+
     override suspend fun unloadModel() {
         llmEngine.unloadModel()
     }
@@ -182,6 +212,19 @@ class ModelRepositoryImpl(
     override fun isModelLoaded(): Boolean = llmEngine.isModelLoaded()
 
     override fun getActiveModelName(): String? = llmEngine.getActiveModelPath()
+
+    private fun EngineModelLoadResult.toDomainResult(): ModelLoadResult = when (this) {
+        is EngineModelLoadResult.Loaded -> ModelLoadResult.Loaded(
+            sourceUri = path,
+            backend = backend,
+            visionCapability = if (supportsVision) {
+                VisionCapability.REQUIRED
+            } else {
+                VisionCapability.NOT_REQUIRED
+            }
+        )
+        is EngineModelLoadResult.Unavailable -> ModelLoadResult.Unavailable(code.name, message)
+    }
 }
 
 class RagRepositoryImpl(

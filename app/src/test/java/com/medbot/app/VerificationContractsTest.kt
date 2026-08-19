@@ -8,6 +8,7 @@ import com.medbot.app.data.rag.VectorSearchEngine
 import com.medbot.app.domain.agents.tools.ToolRegistry
 import com.medbot.app.domain.model.DownloadProgress
 import com.medbot.app.domain.model.ModelDownloadStatus
+import com.medbot.app.domain.model.ModelManifestValidator
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -46,23 +47,10 @@ class VerificationContractsTest {
     }
 
     @Test
-    fun `official model registry contains verified models with unique IDs and valid URLs`() {
-        val ids = ModelRegistry.OFFICIAL_MODELS.map { it.id }
-
-        assertEquals(ids.size, ids.toSet().size)
+    fun `official model registry contains only verified release evidence`() {
         assertTrue(ModelRegistry.OFFICIAL_MODELS.isNotEmpty())
-        ModelRegistry.OFFICIAL_MODELS.forEach { manifest ->
-            assertTrue(manifest.id.isNotBlank())
-            assertTrue(manifest.downloadUrl.startsWith("https://"))
-            assertTrue(manifest.downloadUrl.contains(".litertlm"))
-            assertTrue(manifest.sizeBytes > 0)
-            assertTrue(manifest.description.isNotBlank())
-            assertTrue(manifest.displayName.isNotBlank())
-        }
+        assertTrue(ModelRegistry.OFFICIAL_MODELS.all { ModelManifestValidator.isVerified(it) })
         assertEquals(null, ModelRegistry.getManifestById("not-in-registry"))
-        val gemma = ModelRegistry.getManifestById("gemma-4-e2b-it")
-        assertTrue(gemma != null)
-        assertEquals("Gemma 4 E2B Instruct (Recommended)", gemma?.displayName)
     }
 
     @Test

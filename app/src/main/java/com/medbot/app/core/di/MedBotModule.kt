@@ -27,6 +27,7 @@ import com.medbot.app.domain.repository.SkinAnalysisGateway
 import com.medbot.app.domain.repository.SkinMediaGateway
 import com.medbot.app.domain.repository.SafDocumentGateway
 import com.medbot.app.domain.repository.ModelFileGateway
+import com.medbot.app.domain.repository.ModelStorageGateway
 import com.medbot.app.domain.repository.UserPreferencesRepository
 import com.medbot.app.domain.usecase.AnalyzeSkinUseCase
 import com.medbot.app.domain.usecase.CheckDrugInteractionsUseCase
@@ -97,6 +98,10 @@ object MedBotModule {
     @Provides
     @Singleton
     fun provideModelFileGateway(gateway: AndroidSafGateway): ModelFileGateway = gateway
+
+    @Provides
+    @Singleton
+    fun provideModelStorageGateway(gateway: AndroidSafGateway): ModelStorageGateway = gateway
 
     @Provides
     @Singleton

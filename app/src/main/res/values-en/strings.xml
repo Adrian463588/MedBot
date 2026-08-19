@@ -111,9 +111,11 @@
     <string name="models_title">Local model</string>
     <string name="models_subtitle">Offline runtime with fail-closed validation</string>
     <string name="models_local_heading">Model file</string>
-    <string name="models_selected_file">Selected file: %1$s</string>
-    <string name="models_no_file">No .litertlm file selected.</string>
-    <string name="models_choose_file">Choose a .litertlm file</string>
+    <string name="models_selected_folder">SAF folder: %1$s</string>
+    <string name="models_no_folder">No SAF folder is selected for model storage.</string>
+    <string name="models_choose_folder">Choose SAF folder</string>
+    <string name="models_import_file">Import a .litertlm file</string>
+    <string name="models_folder_required">Choose a writable SAF folder before downloading.</string>
     <string name="models_backend_heading">Backend</string>
     <string name="models_online_heading">Online catalogue</string>
     <string name="models_online_support">An official catalogue and checksum must exist before download is offered.</string>
@@ -126,6 +128,12 @@
     <string name="models_unload">Unload model</string>
     <string name="models_load">Load model</string>
     <string name="models_retry">Retry</string>
+    <string name="models_download_error_network">The download failed because of the connection or server response. Check the network and retry.</string>
+    <string name="models_download_error_permission">Write access to the SAF folder was lost. Choose the SAF folder again to authorize it.</string>
+    <string name="models_download_error_storage">The SAF folder cannot be written or is unavailable. Choose another folder.</string>
+    <string name="models_download_error_checksum">The model checksum does not match the official manifest. The candidate was rejected.</string>
+    <string name="models_download_error_partial">The partial file is invalid or larger than the manifest. Cancel and start again.</string>
+    <string name="models_download_error_generic">The download failed (%1$s). Check the SAF folder and network, then retry.</string>
 
     <string name="chat_title">Consultation</string>
     <string name="chat_new_session">New session</string>
@@ -233,9 +241,9 @@
     <string name="models_loaded">The local model was initialized.</string>
     <string name="models_load_unavailable">MODEL_UNAVAILABLE: the file failed validation or LiteRT-LM initialization failed.</string>
     <string name="models_unloaded">The local model was unloaded from memory.</string>
-    <string name="models_deleted">The downloaded model file was deleted from app storage.</string>
+    <string name="models_deleted">The model and partial file were deleted from the SAF folder.</string>
     <string name="models_delete">Delete file</string>
-    <string name="models_permission_required">The model file read permission could not be persisted. Choose the file again and grant storage access.</string>
+    <string name="models_permission_required">The folder or file permission could not be persisted. Choose the source again and grant access.</string>
     <string name="skin_body_part_required">Choose a location before requesting analysis.</string>
     <string name="skin_importing">Copying photo locally…</string>
     <string name="skin_failed_generic">Local analysis could not run.</string>
@@ -266,12 +274,6 @@
     <string name="models_tab_all">All</string>
     <string name="models_tab_llm">LLM Models</string>
     <string name="models_tab_vision">Vision Models</string>
-    <string name="models_custom_heading">Download Custom Model URL</string>
-    <string name="models_custom_url_label">HTTPS Download URL (.litertlm)</string>
-    <string name="models_custom_name_label">Model Name</string>
-    <string name="models_custom_vision_checkbox">Supports Vision / Images</string>
-    <string name="models_custom_add_button">Add to Catalogue</string>
-    <string name="models_custom_added">Custom model successfully added to download catalogue.</string>
     <string name="models_speed_format">%1$s/s</string>
     <string name="models_recommend_tag">Recommended</string>
     <string name="models_vision_tag">Vision</string>

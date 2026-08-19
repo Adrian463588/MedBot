@@ -5,41 +5,44 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.domain.model.DownloadProgress
-import com.medbot.app.domain.model.ModelFormat
 import com.medbot.app.domain.model.ModelManifest
 import com.medbot.app.domain.repository.ModelRepository
 import com.medbot.app.domain.repository.ModelFileGateway
+import com.medbot.app.domain.repository.ModelStorageGateway
 import com.medbot.app.domain.repository.UserPreferencesRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 sealed interface ModelUiEvent {
     data class SelectBackend(val backend: String) : ModelUiEvent
+    data class SelectSafFolder(val uri: String) : ModelUiEvent
     data class SelectSafUri(val uri: String) : ModelUiEvent
     data object ClearSafUri : ModelUiEvent
     data class StartDownload(val modelId: String) : ModelUiEvent
     data class PauseDownload(val modelId: String) : ModelUiEvent
     data class CancelDownload(val modelId: String) : ModelUiEvent
     data class DeleteModel(val modelId: String) : ModelUiEvent
-    data class LoadModel(val path: String) : ModelUiEvent
+    data class LoadModel(val modelId: String) : ModelUiEvent
     data object UnloadModel : ModelUiEvent
-    data class AddCustomModel(val name: String, val url: String, val isVision: Boolean) : ModelUiEvent
 }
 
-enum class ModelMessageKind { LOADED, UNAVAILABLE, UNLOADED, DELETED, PERMISSION_REQUIRED, CUSTOM_ADDED }
+enum class ModelMessageKind { LOADED, UNAVAILABLE, UNLOADED, DELETED, PERMISSION_REQUIRED }
 
-data class ModelMessage(val kind: ModelMessageKind)
+data class ModelMessage(val kind: ModelMessageKind, val detail: String? = null)
 
 @HiltViewModel
 class ModelViewModel @Inject constructor(
     private val modelRepository: ModelRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val modelFileGateway: ModelFileGateway
+    private val modelFileGateway: ModelFileGateway,
+    private val modelStorageGateway: ModelStorageGateway
 ) : ViewModel() {
     private val _modelsList = MutableStateFlow(ModelRegistry.getAllModels())
     val availableModels: StateFlow<List<ModelManifest>> = _modelsList.asStateFlow()
@@ -59,7 +62,11 @@ class ModelViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             safFolderUri.collect { uri ->
-                _safFileName.value = uri?.let { modelFileGateway.displayName(it).getOrNull() }
+                _safFileName.value = uri?.let { folderUri ->
+                    withContext(Dispatchers.IO) {
+                        modelStorageGateway.validateDestination(folderUri).getOrNull()?.displayName
+                    }
+                }
             }
         }
     }
@@ -67,39 +74,19 @@ class ModelViewModel @Inject constructor(
     fun onEvent(event: ModelUiEvent) {
         when (event) {
             is ModelUiEvent.SelectBackend -> selectBackend(event.backend)
+            is ModelUiEvent.SelectSafFolder -> selectSafFolder(event.uri)
             is ModelUiEvent.SelectSafUri -> selectModelUri(event.uri)
             ModelUiEvent.ClearSafUri -> setSafFolder(null)
             is ModelUiEvent.StartDownload -> startDownload(event.modelId)
             is ModelUiEvent.PauseDownload -> pauseDownload(event.modelId)
             is ModelUiEvent.CancelDownload -> cancelDownload(event.modelId)
             is ModelUiEvent.DeleteModel -> deleteModel(event.modelId)
-            is ModelUiEvent.LoadModel -> loadModel(event.path)
+            is ModelUiEvent.LoadModel -> loadModel(event.modelId)
             ModelUiEvent.UnloadModel -> unloadModel()
-            is ModelUiEvent.AddCustomModel -> addCustomModel(event.name, event.url, event.isVision)
         }
     }
 
     fun selectBackend(backend: String) { _selectedBackend.value = backend }
-
-    fun addCustomModel(name: String, url: String, isVision: Boolean) {
-        val id = "custom-${System.currentTimeMillis()}"
-        val manifest = ModelManifest(
-            id = id,
-            displayName = name.ifBlank { "Custom Model" },
-            version = "1.0",
-            format = ModelFormat.LITERTLM,
-            downloadUrl = url.trim(),
-            sizeBytes = 0L,
-            sha256 = "",
-            minimumRamMb = 2048,
-            isMultimodal = isVision,
-            recommendedBackend = if (isVision) "GPU" else "AUTO",
-            description = "Custom user-provided LiteRT model URL."
-        )
-        ModelRegistry.registerCustomManifest(manifest)
-        _modelsList.value = ModelRegistry.getAllModels()
-        _modelMessage.value = ModelMessage(ModelMessageKind.CUSTOM_ADDED)
-    }
 
     fun startDownload(modelId: String) = viewModelScope.launch { modelRepository.startDownload(modelId) }
     fun pauseDownload(modelId: String) = viewModelScope.launch { modelRepository.pauseDownload(modelId) }
@@ -109,11 +96,16 @@ class ModelViewModel @Inject constructor(
         _modelMessage.value = ModelMessage(ModelMessageKind.DELETED)
     }
 
-    fun loadModel(path: String) {
+    fun loadModel(modelId: String) {
         viewModelScope.launch {
-            val loaded = modelRepository.loadModelToRam(path, _selectedBackend.value)
-            _modelMessage.value = if (loaded) ModelMessage(ModelMessageKind.LOADED)
-            else ModelMessage(ModelMessageKind.UNAVAILABLE)
+            when (val result = modelRepository.loadVerifiedModelToRam(modelId, _selectedBackend.value)) {
+                is com.medbot.app.domain.model.ModelLoadResult.Loaded -> {
+                    _modelMessage.value = ModelMessage(ModelMessageKind.LOADED)
+                }
+                is com.medbot.app.domain.model.ModelLoadResult.Unavailable -> {
+                    _modelMessage.value = ModelMessage(ModelMessageKind.UNAVAILABLE, result.message)
+                }
+            }
         }
     }
 
@@ -127,19 +119,48 @@ class ModelViewModel @Inject constructor(
     fun setSafFolder(uri: String?) {
         viewModelScope.launch {
             userPreferencesRepository.setSafModelFolderUri(uri)
-            if (uri != null) loadModel(uri) else unloadModel()
+            if (uri == null) {
+                _safFileName.value = null
+            }
+        }
+    }
+
+    private fun selectSafFolder(uri: String) {
+        viewModelScope.launch {
+            val destination = withContext(Dispatchers.IO) {
+                val permission = modelStorageGateway.takePersistableTreePermission(uri)
+                permission.fold(
+                    onSuccess = { modelStorageGateway.validateDestination(uri) },
+                    onFailure = { Result.failure(it) }
+                )
+            }
+            if (destination.isFailure) {
+                _modelMessage.value = ModelMessage(ModelMessageKind.PERMISSION_REQUIRED)
+                return@launch
+            }
+            userPreferencesRepository.setSafModelFolderUri(uri)
+            _safFileName.value = destination.getOrNull()?.displayName
+            _modelMessage.value = null
         }
     }
 
     fun selectModelUri(uri: String) {
         viewModelScope.launch {
-            val permission = modelFileGateway.takePersistableReadPermission(uri)
+            val permission = withContext(Dispatchers.IO) {
+                modelFileGateway.takePersistableReadPermission(uri)
+            }
             if (permission.isFailure) {
                 _modelMessage.value = ModelMessage(ModelMessageKind.PERMISSION_REQUIRED)
                 return@launch
             }
-            _safFileName.value = modelFileGateway.displayName(uri).getOrNull()
-            setSafFolder(uri)
+            when (val result = modelRepository.loadImportedModelToRam(uri, _selectedBackend.value)) {
+                is com.medbot.app.domain.model.ModelLoadResult.Loaded -> {
+                    _modelMessage.value = ModelMessage(ModelMessageKind.LOADED)
+                }
+                is com.medbot.app.domain.model.ModelLoadResult.Unavailable -> {
+                    _modelMessage.value = ModelMessage(ModelMessageKind.UNAVAILABLE, result.message)
+                }
+            }
         }
     }
 
@@ -149,4 +170,3 @@ class ModelViewModel @Inject constructor(
 
     fun installedModelPath(modelId: String): String? = modelRepository.getInstalledModelPath(modelId)
 }
-

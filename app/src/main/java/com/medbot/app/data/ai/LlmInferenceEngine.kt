@@ -35,7 +35,12 @@ import java.security.MessageDigest
 import java.util.Locale
 
 /** Explicit model-load failures. */
-enum class ModelFailureCode { MODEL_UNAVAILABLE, MODEL_INVALID, ENGINE_INITIALIZATION_FAILED }
+enum class ModelFailureCode {
+    MODEL_UNAVAILABLE,
+    MODEL_INVALID,
+    ENGINE_INITIALIZATION_FAILED,
+    VISION_UNAVAILABLE
+}
 
 /** Typed failure used when a model cannot be validated or initialized. */
 class ModelUnavailableException(
@@ -77,15 +82,23 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
         path: String,
         backend: String = "AUTO",
         expectedSizeBytes: Long? = null,
-        expectedSha256: String? = null
-    ): Boolean = loadModelResult(path, backend, expectedSizeBytes, expectedSha256) is ModelLoadResult.Loaded
+        expectedSha256: String? = null,
+        requiresVision: Boolean = false
+    ): Boolean = loadModelResult(
+        path = path,
+        backend = backend,
+        expectedSizeBytes = expectedSizeBytes,
+        expectedSha256 = expectedSha256,
+        requiresVision = requiresVision
+    ) is ModelLoadResult.Loaded
 
     /** Validates a local/content model and initializes the real LiteRT-LM engine. */
     suspend fun loadModelResult(
         path: String,
         backend: String = "AUTO",
         expectedSizeBytes: Long? = null,
-        expectedSha256: String? = null
+        expectedSha256: String? = null,
+        requiresVision: Boolean = false
     ): ModelLoadResult = withContext(Dispatchers.IO) {
         val model = try {
             prepareModel(path, expectedSizeBytes, expectedSha256)
@@ -99,7 +112,7 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
         }
 
         val candidate = try {
-            createRuntime(model, backend)
+            createRuntime(model, backend, requiresVision)
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
@@ -108,8 +121,10 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
         }
         if (candidate == null) {
             return@withContext rememberFailure(
-                ModelFailureCode.ENGINE_INITIALIZATION_FAILED,
-                "LiteRT-LM engine initialization failed"
+                if (requiresVision) ModelFailureCode.VISION_UNAVAILABLE
+                else ModelFailureCode.ENGINE_INITIALIZATION_FAILED,
+                if (requiresVision) "LiteRT-LM vision runtime initialization failed"
+                else "LiteRT-LM engine initialization failed"
             )
         }
 
@@ -304,13 +319,23 @@ class LlmInferenceEngine(context: Context) : LocalLlmGateway {
         }
     }
 
-    private fun createRuntime(model: File, requestedBackend: String): RuntimeHandle? {
+    private fun createRuntime(
+        model: File,
+        requestedBackend: String,
+        requiresVision: Boolean
+    ): RuntimeHandle? {
         val selected = if (requestedBackend.equals("GPU", true)) "gpu" else "cpu"
-        val attempts = buildList {
-            add(EngineAttempt(selected, selected, true))
-            if (selected == "gpu") add(EngineAttempt("gpu", "cpu", true))
-            add(EngineAttempt("cpu", "cpu", true))
-            add(EngineAttempt("cpu", null, false))
+        val attempts = if (requiresVision) {
+            buildList {
+                add(EngineAttempt(selected, selected, true))
+                if (selected == "gpu") add(EngineAttempt("gpu", "cpu", true))
+                add(EngineAttempt("cpu", "cpu", true))
+            }
+        } else {
+            buildList {
+                add(EngineAttempt(selected, null, false))
+                if (selected == "gpu") add(EngineAttempt("cpu", null, false))
+            }
         }.distinct()
         for (attempt in attempts) {
             var engine: Engine? = null

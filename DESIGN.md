@@ -106,7 +106,7 @@ On compact windows the scaffold reflows to a single visible pane. Back navigatio
 
 `MainActivity` calls `enableEdgeToEdge()`. The root `Scaffold` uses `ScaffoldDefaults.contentWindowInsets`. The top bar consumes only horizontal safe-drawing insets because the root owns vertical system-bar insets. Content uses the root padding and does not add manual zero-inset voids. Keyboard, cutout, gesture navigation, API 35, rotation, and landscape are acceptance cases.
 
-Material 3 is pinned to `1.4.0`. The current toolchain is AGP `8.8.2`/compile SDK `35`, so the project uses stable Material Adaptive `1.2.0`. Adaptive `1.3.0` is intentionally recorded as a compatibility blocker until the toolchain can satisfy its published AAR metadata requirements; alpha APIs are not used as a silent workaround.
+Material 3 is pinned to `1.4.0`. The current toolchain is AGP `8.8.2`/compile SDK `35`, so the project uses stable Material Adaptive `1.2.0` through the stable `ListDetailPaneScaffold` API. Adaptive `1.3.0` remains a compatibility decision to verify separately; alpha APIs are not introduced as a silent workaround.
 
 ## 5. Motion and interaction
 
@@ -142,7 +142,7 @@ Documents enter only through SAF. PDF uses a real PDF parser; TXT/MD and DOCX re
 
 ### Model Manager
 
-The picker accepts `.litertlm`. A model is loaded only after readable file, extension, size, optional verified checksum, backend selection, and LiteRT-LM engine initialization succeed. The official registry is empty until a release-owned manifest supplies verified HTTPS URL, size, SHA-256, and source provenance. Download supports bounded resume, HTTP status validation, disk checks, measured speed, SHA-256, and atomic promotion.
+The screen separates two SAF actions: choose a writable model destination folder with `ACTION_OPEN_DOCUMENT_TREE`, or import one `.litertlm` file with `ACTION_OPEN_DOCUMENT`. A downloaded model is loaded only after the SAF artifact is re-read and its manifest filename, exact size, SHA-256, backend, capability, and LiteRT-LM initialization succeed. The release-owned registry currently exposes only four manifests whose HTTPS URLs, exact sizes, SHA-256 values, source revisions, provenance, format, and runtime capability were verified from official LiteRT Community model artifacts. Download supports bounded resume, HTTP status and `Content-Range` validation, ETag protection, measured speed, SHA-256, and SAF promotion. Reinstall recovery rediscovers the persisted folder and re-authorizes it if Android revokes the grant; the external artifact is not treated as app-private data.
 
 ### Persona
 

@@ -111,9 +111,11 @@
     <string name="models_title">Model lokal</string>
     <string name="models_subtitle">Runtime offline dengan validasi fail-closed</string>
     <string name="models_local_heading">Berkas model</string>
-    <string name="models_selected_file">Berkas dipilih: %1$s</string>
-    <string name="models_no_file">Belum ada berkas .litertlm yang dipilih.</string>
-    <string name="models_choose_file">Pilih berkas .litertlm</string>
+    <string name="models_selected_folder">Folder SAF: %1$s</string>
+    <string name="models_no_folder">Belum ada folder SAF untuk penyimpanan model.</string>
+    <string name="models_choose_folder">Pilih folder SAF</string>
+    <string name="models_import_file">Impor berkas .litertlm</string>
+    <string name="models_folder_required">Pilih folder SAF yang dapat ditulis sebelum mengunduh.</string>
     <string name="models_backend_heading">Backend</string>
     <string name="models_online_heading">Katalog online</string>
     <string name="models_online_support">Katalog dan checksum resmi harus tersedia sebelum unduhan ditawarkan.</string>
@@ -126,6 +128,12 @@
     <string name="models_unload">Lepas model</string>
     <string name="models_load">Muat model</string>
     <string name="models_retry">Coba lagi</string>
+    <string name="models_download_error_network">Unduhan gagal karena koneksi atau respons server. Periksa jaringan lalu coba lagi.</string>
+    <string name="models_download_error_permission">Akses tulis folder SAF hilang. Pilih folder SAF lagi untuk memberi otorisasi.</string>
+    <string name="models_download_error_storage">Folder SAF tidak dapat ditulis atau tidak tersedia. Pilih folder lain.</string>
+    <string name="models_download_error_checksum">Checksum model tidak cocok dengan manifest resmi. Berkas kandidat ditolak.</string>
+    <string name="models_download_error_partial">Berkas partial tidak valid atau lebih besar dari manifest. Batalkan lalu mulai ulang.</string>
+    <string name="models_download_error_generic">Unduhan gagal (%1$s). Periksa folder SAF dan jaringan, lalu coba lagi.</string>
 
     <string name="chat_title">Konsultasi</string>
     <string name="chat_new_session">Sesi baru</string>
@@ -233,9 +241,9 @@
     <string name="models_loaded">Model lokal berhasil diinisialisasi.</string>
     <string name="models_load_unavailable">MODEL_UNAVAILABLE: berkas tidak lolos validasi atau engine LiteRT-LM gagal diinisialisasi.</string>
     <string name="models_unloaded">Model lokal dilepas dari memori.</string>
-    <string name="models_deleted">Berkas model unduhan dihapus dari penyimpanan aplikasi.</string>
+    <string name="models_deleted">Berkas model dan partial dihapus dari folder SAF.</string>
     <string name="models_delete">Hapus berkas</string>
-    <string name="models_permission_required">Izin baca berkas model tidak dapat dipertahankan. Pilih berkas lagi dan berikan akses penyimpanan.</string>
+    <string name="models_permission_required">Izin folder atau berkas tidak dapat dipertahankan. Pilih kembali sumber model dan berikan akses.</string>
     <string name="skin_body_part_required">Pilih lokasi sebelum meminta analisis.</string>
     <string name="skin_importing">Menyalin foto lokal…</string>
     <string name="skin_failed_generic">Analisis lokal tidak dapat dijalankan.</string>
@@ -266,12 +274,6 @@
     <string name="models_tab_all">Semua</string>
     <string name="models_tab_llm">Model LLM</string>
     <string name="models_tab_vision">Model Vision</string>
-    <string name="models_custom_heading">Unduh URL Model Kustom</string>
-    <string name="models_custom_url_label">URL Unduhan HTTPS (.litertlm)</string>
-    <string name="models_custom_name_label">Nama Model</string>
-    <string name="models_custom_vision_checkbox">Model Mendukung Citra (Vision)</string>
-    <string name="models_custom_add_button">Tambahkan ke Katalog</string>
-    <string name="models_custom_added">Model kustom berhasil ditambahkan ke katalog unduhan.</string>
     <string name="models_speed_format">%1$s/dtk</string>
     <string name="models_recommend_tag">Disarankan</string>
     <string name="models_vision_tag">Vision</string>

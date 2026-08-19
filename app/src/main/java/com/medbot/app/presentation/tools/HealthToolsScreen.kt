@@ -5,16 +5,22 @@ package com.medbot.app.presentation.tools
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Delete
@@ -34,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,14 +50,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.medbot.app.R
 import com.medbot.app.core.designsystem.components.AdaptiveContent
 import com.medbot.app.core.designsystem.components.MedBotSpacing
 import com.medbot.app.core.designsystem.components.MedBotTopAppBar
+import com.medbot.app.core.designsystem.components.MedBotWindowWidth
+import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.model.Drug
 import com.medbot.app.domain.model.DrugInteraction
 import com.medbot.app.domain.model.InteractionSeverity
@@ -68,26 +82,31 @@ private val toolTabs = listOf(
 fun HealthToolsScreen(viewModel: ToolsViewModel) {
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
 
-    Column {
+    Column(modifier = Modifier.fillMaxSize()) {
         MedBotTopAppBar(
             title = stringResource(R.string.tools_title),
             subtitle = stringResource(R.string.tools_subtitle)
         )
-        PrimaryScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = MedBotSpacing.medium) {
+        PrimaryScrollableTabRow(
+            selectedTabIndex = selectedTab,
+            modifier = Modifier.fillMaxWidth(),
+            edgePadding = MedBotSpacing.medium
+        ) {
             toolTabs.forEachIndexed { index, labelRes ->
                 Tab(
                     selected = selectedTab == index,
-                     onClick = { viewModel.onEvent(ToolsUiEvent.SelectTab(index)) },
-                    text = { Text(stringResource(labelRes)) }
+                    onClick = { viewModel.onEvent(ToolsUiEvent.SelectTab(index)) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    text = { Text(stringResource(labelRes), maxLines = 2) }
                 )
             }
         }
-        AdaptiveContent(modifier = Modifier.weight(1f)) {
+        AdaptiveContent(modifier = Modifier.weight(1f).fillMaxWidth()) { windowWidth ->
             when (selectedTab) {
                 0 -> DrugToolsContent(viewModel)
                 1 -> LabToolsContent(viewModel)
-                2 -> CalculatorToolsContent(viewModel)
-                else -> ReminderToolsContent(viewModel)
+                2 -> CalculatorToolsContent(viewModel, windowWidth)
+                else -> ReminderToolsContent(viewModel, windowWidth)
             }
         }
     }
@@ -108,8 +127,8 @@ private fun DrugToolsContent(viewModel: ToolsViewModel) {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(MedBotSpacing.large),
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentPadding = toolContentPadding(),
         verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)
     ) {
         item {
@@ -210,8 +229,8 @@ private fun LabToolsContent(viewModel: ToolsViewModel) {
     var selectedTest by rememberSaveable { mutableStateOf("") }
     var value by rememberSaveable { mutableStateOf("") }
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(MedBotSpacing.large),
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentPadding = toolContentPadding(),
         verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)
     ) {
         item {
@@ -265,7 +284,7 @@ private fun LabTestRow(test: LabTest, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CalculatorToolsContent(viewModel: ToolsViewModel) {
+private fun CalculatorToolsContent(viewModel: ToolsViewModel, windowWidth: MedBotWindowWidth) {
     val state by viewModel.calculatorState.collectAsStateWithLifecycle()
     var bmiWeight by rememberSaveable { mutableStateOf("") }
     var bmiHeight by rememberSaveable { mutableStateOf("") }
@@ -280,8 +299,8 @@ private fun CalculatorToolsContent(viewModel: ToolsViewModel) {
     var indication by rememberSaveable { mutableStateOf("") }
 
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(MedBotSpacing.large),
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentPadding = toolContentPadding(),
         verticalArrangement = Arrangement.spacedBy(MedBotSpacing.large)
     ) {
         item {
@@ -289,58 +308,60 @@ private fun CalculatorToolsContent(viewModel: ToolsViewModel) {
             Text(stringResource(R.string.tools_calculator_support), style = MaterialTheme.typography.bodyMedium)
         }
         item {
-            CalculatorSection(title = stringResource(R.string.tools_bmi_title)) {
-                NumberField(bmiWeight, { bmiWeight = it }, R.string.tools_weight)
-                NumberField(bmiHeight, { bmiHeight = it }, R.string.tools_height)
+            CalculatorSection(title = stringResource(R.string.tools_bmi_title)) { actionRequester ->
+                ResponsiveFieldRow(windowWidth) { fieldModifier ->
+                    NumberField(bmiWeight, { bmiWeight = it }, R.string.tools_weight, fieldModifier, actionRequester)
+                    NumberField(bmiHeight, { bmiHeight = it }, R.string.tools_height, fieldModifier, actionRequester)
+                }
                 Button(
-                     onClick = { viewModel.onEvent(ToolsUiEvent.CalculateBmi(bmiWeight, bmiHeight)) },
+                    onClick = { viewModel.onEvent(ToolsUiEvent.CalculateBmi(bmiWeight, bmiHeight)) },
                     enabled = bmiWeight.isNotBlank() && bmiHeight.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .bringIntoViewRequester(actionRequester)
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .springBounceClick()
                 ) { Text(stringResource(R.string.tools_calculate_bmi)) }
             }
         }
         item {
-            CalculatorSection(title = stringResource(R.string.tools_due_date_title)) {
-                NumberField(day, { day = it }, R.string.tools_day)
-                NumberField(month, { month = it }, R.string.tools_month)
-                NumberField(year, { year = it }, R.string.tools_year)
+            CalculatorSection(title = stringResource(R.string.tools_due_date_title)) { actionRequester ->
+                ResponsiveFieldRow(windowWidth) { fieldModifier ->
+                    NumberField(day, { day = it }, R.string.tools_day, fieldModifier, actionRequester)
+                    NumberField(month, { month = it }, R.string.tools_month, fieldModifier, actionRequester)
+                    NumberField(year, { year = it }, R.string.tools_year, fieldModifier, actionRequester)
+                }
                 Button(
-                     onClick = { viewModel.onEvent(ToolsUiEvent.CalculateDueDate(day, month, year)) },
+                    onClick = { viewModel.onEvent(ToolsUiEvent.CalculateDueDate(day, month, year)) },
                     enabled = day.isNotBlank() && month.isNotBlank() && year.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .bringIntoViewRequester(actionRequester)
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .springBounceClick()
                 ) { Text(stringResource(R.string.tools_calculate_due_date)) }
             }
         }
         item {
-            CalculatorSection(title = stringResource(R.string.tools_paediatric_title)) {
-                NumberField(ageMonths, { ageMonths = it }, R.string.tools_age_months)
-                NumberField(weight, { weight = it }, R.string.tools_weight)
-                NumberField(height, { height = it }, R.string.tools_height)
-                OutlinedTextField(
-                    value = gender,
-                    onValueChange = { gender = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.tools_gender)) },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = drug,
-                    onValueChange = { drug = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.tools_drug_name)) },
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = indication,
-                    onValueChange = { indication = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.tools_indication)) },
-                    singleLine = true
-                )
+            CalculatorSection(title = stringResource(R.string.tools_paediatric_title)) { actionRequester ->
+                ResponsiveFieldRow(windowWidth) { fieldModifier ->
+                    NumberField(ageMonths, { ageMonths = it }, R.string.tools_age_months, fieldModifier, actionRequester)
+                    NumberField(weight, { weight = it }, R.string.tools_weight, fieldModifier, actionRequester)
+                    NumberField(height, { height = it }, R.string.tools_height, fieldModifier, actionRequester)
+                }
+                ResponsiveFieldRow(windowWidth) { fieldModifier ->
+                    CalculatorTextField(gender, { gender = it }, R.string.tools_gender, fieldModifier, actionRequester)
+                    CalculatorTextField(drug, { drug = it }, R.string.tools_drug_name, fieldModifier, actionRequester)
+                    CalculatorTextField(indication, { indication = it }, R.string.tools_indication, fieldModifier, actionRequester)
+                }
                 Button(
-                     onClick = { viewModel.onEvent(ToolsUiEvent.CalculatePaediatric(ageMonths, weight, height, gender, drug, indication)) },
+                    onClick = { viewModel.onEvent(ToolsUiEvent.CalculatePaediatric(ageMonths, weight, height, gender, drug, indication)) },
                     enabled = listOf(ageMonths, weight, height, gender, drug, indication).all(String::isNotBlank),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .bringIntoViewRequester(actionRequester)
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .springBounceClick()
                 ) { Text(stringResource(R.string.tools_calculate_paediatric)) }
             }
         }
@@ -351,7 +372,30 @@ private fun CalculatorToolsContent(viewModel: ToolsViewModel) {
 }
 
 @Composable
-private fun CalculatorSection(title: String, content: @Composable () -> Unit) {
+private fun ResponsiveFieldRow(
+    windowWidth: MedBotWindowWidth,
+    content: @Composable (Modifier) -> Unit
+) {
+    if (windowWidth == MedBotWindowWidth.COMPACT) {
+        Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
+            content(Modifier.fillMaxWidth())
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)
+        ) {
+            content(Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun CalculatorSection(
+    title: String,
+    content: @Composable (BringIntoViewRequester) -> Unit
+) {
+    val actionRequester = remember { BringIntoViewRequester() }
     ToolSurface {
         Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -359,32 +403,59 @@ private fun CalculatorSection(title: String, content: @Composable () -> Unit) {
                 Spacer(Modifier.width(MedBotSpacing.medium))
                 Text(title, style = MaterialTheme.typography.titleMedium)
             }
-            content()
+            content(actionRequester)
         }
     }
 }
 
 @Composable
-private fun NumberField(value: String, onValueChange: (String) -> Unit, labelRes: Int) {
+private fun NumberField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    labelRes: Int,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    actionRequester: BringIntoViewRequester
+) {
+    CalculatorTextField(value, onValueChange, labelRes, modifier, actionRequester, KeyboardOptions(keyboardType = KeyboardType.Decimal))
+}
+
+@Composable
+private fun CalculatorTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    labelRes: Int,
+    modifier: Modifier,
+    actionRequester: BringIntoViewRequester,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(isFocused, imeBottom) {
+        if (isFocused && imeBottom > 0) {
+            delay(150)
+            actionRequester.bringIntoView()
+        }
+    }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
         label = { Text(stringResource(labelRes)) },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+        keyboardOptions = keyboardOptions
     )
 }
 
 @Composable
-private fun ReminderToolsContent(viewModel: ToolsViewModel) {
+private fun ReminderToolsContent(viewModel: ToolsViewModel, windowWidth: MedBotWindowWidth) {
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
+    val addReminderRequester = remember { BringIntoViewRequester() }
     var title by rememberSaveable { mutableStateOf("") }
     var hour by rememberSaveable { mutableStateOf("") }
     var minute by rememberSaveable { mutableStateOf("") }
     LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(MedBotSpacing.large),
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentPadding = toolContentPadding(),
         verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)
     ) {
         item {
@@ -402,16 +473,20 @@ private fun ReminderToolsContent(viewModel: ToolsViewModel) {
             )
         }
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
-                NumberField(hour, { hour = it }, R.string.tools_reminder_hour)
-                NumberField(minute, { minute = it }, R.string.tools_reminder_minute)
+            ResponsiveFieldRow(windowWidth) { fieldModifier ->
+                NumberField(hour, { hour = it }, R.string.tools_reminder_hour, fieldModifier, addReminderRequester)
+                NumberField(minute, { minute = it }, R.string.tools_reminder_minute, fieldModifier, addReminderRequester)
             }
         }
         item {
             Button(
-                 onClick = { viewModel.onEvent(ToolsUiEvent.AddReminder(title, hour.toIntOrNull() ?: -1, minute.toIntOrNull() ?: -1)) },
+                onClick = { viewModel.onEvent(ToolsUiEvent.AddReminder(title, hour.toIntOrNull() ?: -1, minute.toIntOrNull() ?: -1)) },
                 enabled = title.isNotBlank() && hour.toIntOrNull() in 0..23 && minute.toIntOrNull() in 0..59,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .bringIntoViewRequester(addReminderRequester)
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .springBounceClick()
             ) { Text(stringResource(R.string.tools_add_reminder)) }
         }
         if (reminders.isEmpty()) {
@@ -434,9 +509,15 @@ private fun ReminderRow(reminder: Reminder, viewModel: ToolsViewModel) {
             }
             Switch(
                 checked = reminder.isEnabled,
-                 onCheckedChange = { viewModel.onEvent(ToolsUiEvent.ToggleReminder(reminder.id, it)) }
+                onCheckedChange = { viewModel.onEvent(ToolsUiEvent.ToggleReminder(reminder.id, it)) },
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .semantics { contentDescription = reminder.title }
             )
-             IconButton(onClick = { viewModel.onEvent(ToolsUiEvent.DeleteReminder(reminder.id)) }) {
+            IconButton(
+                onClick = { viewModel.onEvent(ToolsUiEvent.DeleteReminder(reminder.id)) },
+                modifier = Modifier.heightIn(min = 48.dp).springBounceClick()
+            ) {
                 Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_delete))
             }
         }
@@ -451,7 +532,12 @@ private fun ToolSurface(
 ) {
     val modifier = Modifier
         .fillMaxWidth()
-        .then(if (onClick == null) Modifier else Modifier.clickable(role = Role.Button, onClick = onClick))
+        .then(
+            if (onClick == null) Modifier
+            else Modifier
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClick = onClick)
+        )
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
@@ -537,3 +623,10 @@ private fun UnavailableToolState(text: String) {
         color = MaterialTheme.colorScheme.surfaceVariant
     ) { Text(text, modifier = Modifier.padding(MedBotSpacing.medium), style = MaterialTheme.typography.bodyMedium) }
 }
+
+private fun toolContentPadding(): PaddingValues = PaddingValues(
+    start = MedBotSpacing.medium,
+    top = MedBotSpacing.large,
+    end = MedBotSpacing.medium,
+    bottom = MedBotSpacing.xxLarge
+)

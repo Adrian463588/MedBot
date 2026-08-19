@@ -6,6 +6,7 @@
 
 # Gradle and Build Files
 .gradle/
+.kotlin/
 build/
 **/build/
 app/build/
@@ -63,8 +64,9 @@ docs/*.md
 docs/REFERENCES/
 docs/MDFILE/
 docs/AntiSlop/
+# Generated previews are staged only when they are release evidence referenced by docs.
+docs/e2e/preview/
 docs/e2e/device/
 docs/e2e/reports/
 docs/e2e/journeys/
 docs/traceability.md
-

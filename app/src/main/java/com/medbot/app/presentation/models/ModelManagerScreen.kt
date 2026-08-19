@@ -5,17 +5,17 @@ package com.medbot.app.presentation.models
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,17 +23,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
@@ -42,12 +39,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -58,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -71,6 +68,29 @@ import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.model.DownloadProgress
 import com.medbot.app.domain.model.ModelDownloadStatus
 import com.medbot.app.domain.model.ModelManifest
+import com.medbot.app.domain.model.ModelManifestValidator
+
+private fun ModelManifest.isDisplayableVerifiedManifest(): Boolean =
+    ModelManifestValidator.isVerified(this)
+
+@Composable
+private fun downloadErrorText(errorCode: String?): String? {
+    return when (errorCode) {
+        null, "" -> null
+        "STORAGE_PERMISSION_REQUIRED" -> stringResource(R.string.models_download_error_permission)
+        "STORAGE_UNAVAILABLE", "MODEL_STORAGE_DESTINATION_REQUIRED" ->
+            stringResource(R.string.models_download_error_storage)
+        "SHA256_MISMATCH", "TARGET_EXISTS_INVALID" ->
+            stringResource(R.string.models_download_error_checksum)
+        "PARTIAL_ARTIFACT_OVERSIZED", "PARTIAL_ARTIFACT_MISSING", "RESPONSE_OVERSIZED",
+        "RESUME_VALIDATOR_MISSING" ->
+            stringResource(R.string.models_download_error_partial)
+        "DOWNLOAD_IO_FAILED", "HTTP_ERROR", "HTTP_RANGE_REQUIRED", "HTTP_RANGE_MISMATCH",
+        "HTTP_SOURCE_CHANGED", "RESPONSE_BODY_EMPTY", "DOWNLOAD_FAILED" ->
+            stringResource(R.string.models_download_error_network)
+        else -> stringResource(R.string.models_download_error_generic, errorCode)
+    }
+}
 
 @Composable
 fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
@@ -83,13 +103,12 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
     val allModels by viewModel.availableModels.collectAsStateWithLifecycle()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    var showCustomDialog by rememberSaveable { mutableStateOf(false) }
-
     val filteredModels = remember(allModels, selectedTab) {
+        val verifiedModels = allModels.filter { it.isDisplayableVerifiedManifest() }
         when (selectedTab) {
-            1 -> allModels.filter { !it.isMultimodal }
-            2 -> allModels.filter { it.isMultimodal }
-            else -> allModels
+            1 -> verifiedModels.filter { !it.isMultimodal }
+            2 -> verifiedModels.filter { it.isMultimodal }
+            else -> verifiedModels
         }
     }
 
@@ -97,8 +116,12 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
         if (uri == null) return@rememberLauncherForActivityResult
         viewModel.onEvent(ModelUiEvent.SelectSafUri(uri.toString()))
     }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.onEvent(ModelUiEvent.SelectSafFolder(uri.toString()))
+    }
 
-    Column {
+    Column(modifier = Modifier.fillMaxSize()) {
         MedBotTopAppBar(
             title = stringResource(R.string.models_title),
             subtitle = stringResource(R.string.models_subtitle),
@@ -107,16 +130,18 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                 }
             },
-            actions = {
-                IconButton(onClick = { showCustomDialog = !showCustomDialog }, modifier = Modifier.springBounceClick()) {
-                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.models_custom_heading))
-                }
-            }
+            actions = {}
         )
 
-        AdaptiveContent(modifier = Modifier.weight(1f), maxContentWidth = 840.dp) {
+        AdaptiveContent(modifier = Modifier.weight(1f).fillMaxWidth(), maxContentWidth = 840.dp) {
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = MedBotSpacing.medium, vertical = MedBotSpacing.medium),
+                modifier = Modifier.fillMaxSize().imePadding(),
+                contentPadding = PaddingValues(
+                    start = MedBotSpacing.medium,
+                    top = MedBotSpacing.medium,
+                    end = MedBotSpacing.medium,
+                    bottom = MedBotSpacing.xxLarge
+                ),
                 verticalArrangement = Arrangement.spacedBy(MedBotSpacing.large)
             ) {
                 item {
@@ -142,7 +167,7 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
                                 )
                             }
                             Text(
-                                text = safName?.let { stringResource(R.string.models_selected_file, it) } ?: stringResource(R.string.models_no_file),
+                                text = safName?.let { stringResource(R.string.models_selected_folder, it) } ?: stringResource(R.string.models_no_folder),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -156,12 +181,18 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
                             }
                             AdaptiveFlowRow {
                                 Button(
-                                    onClick = { picker.launch(arrayOf("application/octet-stream", "application/*", "*/*")) },
+                                    onClick = { folderPicker.launch(safUri?.let(Uri::parse)) },
                                     modifier = Modifier.springBounceClick()
                                 ) {
                                     Icon(Icons.Filled.FolderOpen, contentDescription = null)
                                     Spacer(modifier = Modifier.width(MedBotSpacing.small))
-                                    Text(stringResource(R.string.models_choose_file))
+                                    Text(stringResource(R.string.models_choose_folder))
+                                }
+                                OutlinedButton(
+                                    onClick = { picker.launch(arrayOf("application/octet-stream", "application/*", "*/*")) },
+                                    modifier = Modifier.springBounceClick()
+                                ) {
+                                    Text(stringResource(R.string.models_import_file))
                                 }
                                 if (safUri != null) {
                                     OutlinedButton(
@@ -212,18 +243,6 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
                     }
                 }
 
-                if (showCustomDialog) {
-                    item {
-                        CustomModelInputCard(
-                            onAdd = { name, url, isVision ->
-                                viewModel.onEvent(ModelUiEvent.AddCustomModel(name, url, isVision))
-                                showCustomDialog = false
-                            },
-                            onCancel = { showCustomDialog = false }
-                        )
-                    }
-                }
-
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
                         Text(
@@ -236,21 +255,28 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        PrimaryTabRow(selectedTabIndex = selectedTab) {
+                        PrimaryScrollableTabRow(
+                            selectedTabIndex = selectedTab,
+                            modifier = Modifier.fillMaxWidth(),
+                            edgePadding = MedBotSpacing.small
+                        ) {
                             Tab(
                                 selected = selectedTab == 0,
                                 onClick = { selectedTab = 0 },
-                                text = { Text(stringResource(R.string.models_tab_all)) }
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                text = { Text(stringResource(R.string.models_tab_all), maxLines = 2) }
                             )
                             Tab(
                                 selected = selectedTab == 1,
                                 onClick = { selectedTab = 1 },
-                                text = { Text(stringResource(R.string.models_tab_llm)) }
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                text = { Text(stringResource(R.string.models_tab_llm), maxLines = 2) }
                             )
                             Tab(
                                 selected = selectedTab == 2,
                                 onClick = { selectedTab = 2 },
-                                text = { Text(stringResource(R.string.models_tab_vision)) }
+                                modifier = Modifier.heightIn(min = 48.dp),
+                                text = { Text(stringResource(R.string.models_tab_vision), maxLines = 2) }
                             )
                         }
                     }
@@ -277,71 +303,9 @@ fun ModelManagerScreen(viewModel: ModelViewModel, onNavigateBack: () -> Unit) {
                             manifest = manifest,
                             viewModel = viewModel,
                             isLoaded = isLoaded && activeModelName?.contains(manifest.id) == true,
-                            modelPath = viewModel.installedModelPath(manifest.id).orEmpty()
+                            canStartDownload = safUri != null
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CustomModelInputCard(
-    onAdd: (String, String, Boolean) -> Unit,
-    onCancel: () -> Unit
-) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var url by rememberSaveable { mutableStateOf("") }
-    var isVision by rememberSaveable { mutableStateOf(false) }
-
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(MedBotSpacing.medium),
-            verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)
-        ) {
-            Text(
-                text = stringResource(R.string.models_custom_heading),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.models_custom_name_label)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text(stringResource(R.string.models_custom_url_label)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = isVision, onCheckedChange = { isVision = it })
-                Spacer(modifier = Modifier.width(MedBotSpacing.xSmall))
-                Text(
-                    text = stringResource(R.string.models_custom_vision_checkbox),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-            AdaptiveFlowRow {
-                Button(
-                    onClick = { onAdd(name, url, isVision) },
-                    enabled = url.startsWith("https://", ignoreCase = true) && url.contains(".litertlm", ignoreCase = true),
-                    modifier = Modifier.springBounceClick()
-                ) {
-                    Text(stringResource(R.string.models_custom_add_button))
-                }
-                TextButton(onClick = onCancel, modifier = Modifier.springBounceClick()) {
-                    Text(stringResource(R.string.action_cancel))
                 }
             }
         }
@@ -352,11 +316,11 @@ private fun CustomModelInputCard(
 private fun modelMessageText(message: ModelMessage?): String {
     return when (message?.kind) {
         ModelMessageKind.LOADED -> stringResource(R.string.models_loaded)
-        ModelMessageKind.UNAVAILABLE -> stringResource(R.string.models_load_unavailable)
+        ModelMessageKind.UNAVAILABLE -> message.detail?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.models_load_unavailable)
         ModelMessageKind.UNLOADED -> stringResource(R.string.models_unloaded)
         ModelMessageKind.DELETED -> stringResource(R.string.models_deleted)
         ModelMessageKind.PERMISSION_REQUIRED -> stringResource(R.string.models_permission_required)
-        ModelMessageKind.CUSTOM_ADDED -> stringResource(R.string.models_custom_added)
         null -> ""
     }
 }
@@ -366,7 +330,7 @@ private fun ModelDownloadRow(
     manifest: ModelManifest,
     viewModel: ModelViewModel,
     isLoaded: Boolean,
-    modelPath: String
+    canStartDownload: Boolean
 ) {
     val progressFlow = remember(manifest.id) { viewModel.getDownloadFlow(manifest.id) }
     val progressState by progressFlow.collectAsStateWithLifecycle()
@@ -424,11 +388,35 @@ private fun ModelDownloadRow(
                 )
             }
 
+            if (!canStartDownload && progress.status != ModelDownloadStatus.DOWNLOADING) {
+                Text(
+                    text = stringResource(R.string.models_folder_required),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            downloadErrorText(progress.errorMessage)?.let { errorText ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = errorText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(MedBotSpacing.medium)
+                    )
+                }
+            }
+
             AdaptiveFlowRow {
                 when (progress.status) {
                     ModelDownloadStatus.NOT_DOWNLOADED -> {
                         Button(
                             onClick = { viewModel.onEvent(ModelUiEvent.StartDownload(manifest.id)) },
+                            enabled = canStartDownload,
                             modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Filled.Download, contentDescription = null)
@@ -455,6 +443,7 @@ private fun ModelDownloadRow(
                     ModelDownloadStatus.PAUSED -> {
                         Button(
                             onClick = { viewModel.onEvent(ModelUiEvent.StartDownload(manifest.id)) },
+                            enabled = canStartDownload,
                             modifier = Modifier.springBounceClick()
                         ) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = null)
@@ -478,7 +467,7 @@ private fun ModelDownloadRow(
                             }
                         } else {
                             Button(
-                                onClick = { viewModel.onEvent(ModelUiEvent.LoadModel(modelPath)) },
+                                onClick = { viewModel.onEvent(ModelUiEvent.LoadModel(manifest.id)) },
                                 modifier = Modifier.springBounceClick()
                             ) {
                                 Icon(Icons.Filled.Memory, contentDescription = null)
@@ -494,11 +483,13 @@ private fun ModelDownloadRow(
                         }
                     }
                     ModelDownloadStatus.ERROR -> {
-                        Button(
-                            onClick = { viewModel.onEvent(ModelUiEvent.StartDownload(manifest.id)) },
-                            modifier = Modifier.springBounceClick()
-                        ) {
-                            Text(stringResource(R.string.models_retry))
+                        if (canStartDownload && progress.errorMessage != "MODEL_UNAVAILABLE") {
+                            Button(
+                                onClick = { viewModel.onEvent(ModelUiEvent.StartDownload(manifest.id)) },
+                                modifier = Modifier.springBounceClick()
+                            ) {
+                                Text(stringResource(R.string.models_retry))
+                            }
                         }
                     }
                     else -> {
@@ -509,4 +500,3 @@ private fun ModelDownloadRow(
         }
     }
 }
-

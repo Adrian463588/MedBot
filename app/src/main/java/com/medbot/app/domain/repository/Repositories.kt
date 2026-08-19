@@ -30,6 +30,8 @@ interface ModelRepository {
     suspend fun deleteModel(modelId: String)
     fun getInstalledModelPath(modelId: String): String?
     suspend fun loadModelToRam(modelPath: String, backend: String): Boolean
+    suspend fun loadVerifiedModelToRam(modelId: String, backend: String): ModelLoadResult
+    suspend fun loadImportedModelToRam(modelUri: String, backend: String): ModelLoadResult
     suspend fun unloadModel()
     fun isModelLoaded(): Boolean
     fun getActiveModelName(): String?

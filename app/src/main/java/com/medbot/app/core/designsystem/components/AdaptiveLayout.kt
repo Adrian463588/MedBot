@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.activity.compose.BackHandler
@@ -60,6 +61,7 @@ fun AdaptiveContent(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .widthIn(max = maxContentWidth)
         ) {
             content(widthClass)
@@ -74,7 +76,7 @@ fun AdaptiveFlowRow(
     content: @Composable FlowRowScope.() -> Unit
 ) {
     FlowRow(
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(MedBotSpacing.small),
         verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small),
         content = content

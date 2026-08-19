@@ -7,9 +7,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +27,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
@@ -62,8 +62,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -82,10 +80,21 @@ import com.medbot.app.core.designsystem.theme.UrgencyInsufficientSlate
 import com.medbot.app.domain.model.Citation
 import com.medbot.app.domain.model.UrgencyLevel
 
-/** Press feedback observes real pointer input and leaves click handling to the control. */
-fun Modifier.springBounceClick(scaleDown: Float = 0.98f): Modifier = composed {
+/**
+ * Press feedback driven by the control's [MutableInteractionSource].
+ *
+ * Controls should pass the same source to their Material component and this
+ * modifier. When a caller does not provide one, the modifier remains a safe
+ * no-op for interaction state rather than competing with the control's pointer
+ * input; Material components still provide their own ripple and semantics.
+ */
+fun Modifier.springBounceClick(
+    scaleDown: Float = 0.98f,
+    interactionSource: MutableInteractionSource? = null
+): Modifier = composed {
+    val source = interactionSource ?: remember { MutableInteractionSource() }
     val haptic = LocalHapticFeedback.current
-    var pressed by remember { mutableStateOf(false) }
+    val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) scaleDown else 1f,
         animationSpec = spring(
@@ -95,18 +104,15 @@ fun Modifier.springBounceClick(scaleDown: Float = 0.98f): Modifier = composed {
         label = "pressScale"
     )
 
-    LaunchedEffect(pressed) {
-        if (pressed) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+    LaunchedEffect(source) {
+        source.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Press) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+        }
     }
 
-    pointerInput(Unit) {
-        awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            pressed = true
-            waitForUpOrCancellation(pass = PointerEventPass.Initial)
-            pressed = false
-        }
-    }.scale(scale)
+    scale(scale)
 }
 
 @Composable
@@ -118,7 +124,7 @@ fun MedBotTopAppBar(
 ) {
     TopAppBar(
         title = {
-            Column(modifier = Modifier.widthIn(max = 280.dp)) {
+            Column(modifier = Modifier.widthIn(max = 360.dp)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
@@ -177,7 +183,7 @@ fun MedBotBottomBar(currentRoute: String, onNavigate: (String) -> Unit) {
                         contentDescription = destination.label
                     )
                 },
-                label = { Text(destination.label, maxLines = 1) }
+                label = { Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             )
         }
     }
@@ -197,7 +203,7 @@ fun MedBotNavigationRail(currentRoute: String, onNavigate: (String) -> Unit) {
                         contentDescription = destination.label
                     )
                 },
-                label = { Text(destination.label, maxLines = 1) }
+                    label = { Text(destination.label, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             )
         }
     }
