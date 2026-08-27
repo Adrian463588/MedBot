@@ -440,3 +440,112 @@ class SkinAbcdEvaluatorTool : LocalMedicalTool {
         )
     }
 }
+
+class DrugInfoTool(
+    private val drugRepositoryProvider: () -> com.medbot.app.domain.repository.DrugRepository?
+) : LocalMedicalTool {
+    override val name: String = "get_drug_info"
+    override val description: String = "Mencari identitas produk dari katalog lokal; bukan monograf klinis"
+
+    override suspend fun execute(params: Map<String, Any>): ToolResult {
+        val repo = drugRepositoryProvider()
+            ?: return unavailable(name, "Database obat terverifikasi belum tersedia di perangkat.")
+
+        val rawQuery = (params["drug_name"] as? String)
+            ?: (params["query"] as? String)
+            ?: return insufficientData(name, "Parameter 'drug_name' atau 'query' wajib diisi.")
+
+        val cleanQuery = rawQuery.trim()
+        if (cleanQuery.isBlank()) return insufficientData(name, "Query pencarian obat tidak boleh kosong.")
+
+        val exact = repo.getDrugByName(cleanQuery)
+        val matches = if (exact != null) listOf(exact) else repo.findMatchingDrugs(cleanQuery)
+
+        if (matches.isEmpty()) {
+            return ToolResult(
+                toolName = name,
+                isSuccess = false,
+                summary = "Produk '$cleanQuery' tidak ditemukan dalam katalog produk lokal.",
+                data = mapOf("query" to cleanQuery, "count" to 0),
+                errorMessage = "Not found",
+                status = ToolResultStatus.INSUFFICIENT_DATA
+            )
+        }
+
+        val summaryBuilder = StringBuilder()
+        summaryBuilder.append("Ditemukan ${matches.size} kecocokan dalam katalog produk lokal:\n")
+        matches.take(3).forEachIndexed { idx, drug ->
+            summaryBuilder.append("${idx + 1}. **${drug.name}**\n")
+            if (drug.genericName.isNotBlank()) summaryBuilder.append("   - Nama katalog: ${drug.genericName}\n")
+            if (drug.category.isNotBlank()) summaryBuilder.append("   - Kategori katalog: ${drug.category}\n")
+            if (drug.dosageForm.isNotBlank()) summaryBuilder.append("   - Bentuk Sediaan: ${drug.dosageForm}\n")
+            if (drug.strength.isNotBlank()) summaryBuilder.append("   - Kekuatan: ${drug.strength}\n")
+        }
+        summaryBuilder.append("Data ini hanya identitas katalog; indikasi, dosis, interaksi, keamanan, dan formula racikan belum tersedia dari sumber tervalidasi.")
+
+        return ToolResult(
+            toolName = name,
+            isSuccess = true,
+            summary = summaryBuilder.toString().trim(),
+            data = mapOf(
+                "query" to cleanQuery,
+                "count" to matches.size,
+                "primaryName" to matches.first().name,
+                "primaryCategory" to matches.first().category,
+                "primaryDosageForm" to matches.first().dosageForm,
+                "primaryStrength" to matches.first().strength
+            )
+        )
+    }
+}
+
+class CheckDrugInteractionTool(
+    private val drugRepositoryProvider: () -> com.medbot.app.domain.repository.DrugRepository?
+) : LocalMedicalTool {
+    override val name: String = "check_drug_interaction"
+    override val description: String = "Memeriksa potensi interaksi berbahaya antara obat yang dikonsumsi"
+
+    override suspend fun execute(params: Map<String, Any>): ToolResult {
+        val repo = drugRepositoryProvider()
+            ?: return unavailable(name, "Database interaksi obat terverifikasi belum tersedia di perangkat.")
+
+        val knowledge = repo.getMedicationKnowledgeStatus()
+        if (!knowledge.interactionDatasetAvailable) {
+            return unavailable(
+                name,
+                "Dataset interaksi obat tervalidasi belum tersedia. Impor sumber interaksi nyata melalui Basis Pengetahuan sebelum melakukan pemeriksaan."
+            )
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        val drugList = (params["drugs"] as? List<String>)
+            ?: listOfNotNull(params["drug_a"] as? String, params["drug_b"] as? String)
+
+        if (drugList.size < 2) {
+            return insufficientData(name, "Minimal 2 nama obat wajib disediakan untuk pemeriksaan interaksi.")
+        }
+
+        val interactions = repo.checkInteraction(drugList)
+        if (interactions.isEmpty()) {
+            return insufficientData(
+                name,
+                "Tidak ada hasil interaksi yang dapat diverifikasi untuk kombinasi ini; hasil kosong tidak membuktikan kombinasi tersebut aman."
+            )
+        }
+
+        val summary = StringBuilder()
+        interactions.forEach { inter ->
+            summary.append("[${inter.severity.label}] ${inter.drugA} + ${inter.drugB}: ${inter.description}. Rekomendasi: ${inter.recommendation}\n")
+        }
+
+        return ToolResult(
+            toolName = name,
+            isSuccess = true,
+            summary = summary.toString().trim(),
+            data = mapOf(
+                "interactionCount" to interactions.size,
+                "highestSeverity" to interactions.maxByOrNull { it.severity.ordinal }?.severity?.name.orEmpty()
+            )
+        )
+    }
+}

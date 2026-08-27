@@ -1,0 +1,59 @@
+{
+  "project": "MedBot Chatbuddy",
+  "date": "2026-08-27",
+  "device": {
+    "serial": "RRCN3008VYE",
+    "model": "SM-G988B",
+    "api": 33,
+    "resolution": "1440x3200"
+  },
+  "artifact": {
+    "path": "app/build/outputs/apk/debug/app-debug.apk",
+    "sizeBytes": 185154036,
+    "sha256": "0a287d1ea1c883ce5c745d27322ff3c15e8767e80b266fc035fbac2cfdf6bd83"
+  },
+  "checks": {
+    "incrementalInstall": "PASS",
+    "launcherResolve": "PASS",
+    "mainActivityLaunch": "PASS",
+    "fatalExceptionOrAnrLogcatScan": "PASS",
+    "connectedDebugAndroidTest": {
+      "status": "PASS",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "realBankBookRag": {
+      "status": "PASS",
+      "runtime": "MiniLM TFLite + Room + bundled BankBook corpus",
+      "queries": [
+        "Saya mengalami diare, bagaimana triase dan penatalaksanaannya?",
+        "Obat apa yang sesuai untuk diare dan apa kontraindikasinya?"
+      ],
+      "assertions": [
+        "typed local evidence is returned",
+        "evidence has non-empty citation IDs",
+        "evidence carries a 64-character source SHA-256",
+        "medication query returns medication-eligible evidence"
+      ]
+    },
+    "generatedClinicalAnswer": {
+      "status": "BLOCKED",
+      "reason": "No verified LiteRT-LM model was loaded for this physical run; the app must not fabricate an answer."
+    },
+    "visionInference": {
+      "status": "UNAVAILABLE",
+      "reason": "No verified local vision runtime and model were loaded for this physical run."
+    },
+    "xiaomiApi35": {
+      "status": "BLOCKED",
+      "reason": "INSTALL_FAILED_USER_RESTRICTED"
+    }
+  },
+  "notes": [
+    "APK was reinstalled with adb install -r -d; app data was preserved.",
+    "The package was re-enabled for user 0 after instrumentation left it disabled; no app data was cleared.",
+    "Screenshot is a current device preview of the truthful local-readiness Home state, not proof of model generation."
+  ]
+}

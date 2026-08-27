@@ -12,6 +12,12 @@ enum class ModelCapability {
     VISION
 }
 
+/** Access prerequisite declared by the official model source. */
+enum class ModelAccessRequirement {
+    NONE,
+    HAI_DEF_ACCEPTANCE_AND_AUTHENTICATION
+}
+
 /** Runtime capability required by a model load request. */
 enum class VisionCapability {
     NOT_REQUIRED,
@@ -57,6 +63,7 @@ sealed interface ModelLoadResult {
 
 enum class ModelDownloadStatus {
     NOT_DOWNLOADED,
+    PREPARING,
     DOWNLOADING,
     PAUSED,
     VERIFYING,
@@ -71,6 +78,8 @@ data class ModelManifest(
     val version: String,
     val format: ModelFormat,
     val downloadUrl: String,
+    /** Human-facing official model page for gated access and terms. */
+    val sourcePageUrl: String = downloadUrl,
     val sizeBytes: Long,
     val sha256: String,
     val minimumRamMb: Int,
@@ -84,7 +93,9 @@ data class ModelManifest(
     /** Immutable source revision or release identifier; blank values are never downloadable. */
     val sourceRevision: String = "",
     /** Declared model capability; legacy constructors derive this from isMultimodal. */
-    val capability: ModelCapability = if (isMultimodal) ModelCapability.VISION else ModelCapability.TEXT
+    val capability: ModelCapability = if (isMultimodal) ModelCapability.VISION else ModelCapability.TEXT,
+    /** A gated source cannot be downloaded anonymously by the application. */
+    val accessRequirement: ModelAccessRequirement = ModelAccessRequirement.NONE
 ) {
     val visionCapability: VisionCapability
         get() = if (isMultimodal || capability == ModelCapability.VISION) {

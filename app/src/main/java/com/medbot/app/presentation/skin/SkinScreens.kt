@@ -9,6 +9,12 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,11 +31,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Timeline
@@ -43,6 +57,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -192,20 +207,10 @@ fun SkinScanScreen(viewModel: SkinViewModel, onNavigateBack: () -> Unit, onNavig
                     }
                 }
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)) {
-                        Text(stringResource(R.string.skin_body_part), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(stringResource(R.string.skin_body_part_required), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        AdaptiveFlowRow {
-                            BODY_PARTS.drop(1).forEach { part ->
-                                FilterChip(
-                                    selected = selectedPart == part.id,
-                                    onClick = { selectedPart = part.id },
-                                    label = { Text(stringResource(part.labelRes)) },
-                                    modifier = Modifier.springBounceClick()
-                                )
-                            }
-                        }
-                    }
+                    SkinBodyPartDropdownSelector(
+                        selectedPart = selectedPart,
+                        onSelectPart = { selectedPart = it }
+                    )
                 }
                 item {
                     OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text(stringResource(R.string.skin_notes_label)) }, supportingText = { Text(stringResource(R.string.skin_notes_support)) }, modifier = Modifier.fillMaxWidth(), minLines = 3)
@@ -251,16 +256,11 @@ fun SkinLineageScreen(viewModel: SkinViewModel, onNavigateBack: () -> Unit, onNa
                 listPane = {
                     LazyColumn(contentPadding = PaddingValues(MedBotSpacing.medium), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.medium)) {
                         item {
-                            AdaptiveFlowRow {
-                                BODY_PARTS.forEach { part ->
-                                    FilterChip(
-                                        selected = selectedPart == part.id,
-                                         onClick = { viewModel.onEvent(SkinUiEvent.SelectBodyPartFilter(part.id)) },
-                                        label = { Text(stringResource(part.labelRes)) },
-                                        modifier = Modifier.springBounceClick()
-                                    )
-                                }
-                            }
+                            SkinBodyPartDropdownFilter(
+                                selectedPart = selectedPart,
+                                onSelectPart = { viewModel.onEvent(SkinUiEvent.SelectBodyPartFilter(it)) },
+                                records = records
+                            )
                         }
                         if (filtered.isEmpty()) {
                             item {
@@ -363,4 +363,308 @@ private fun rememberBitmap(path: String?): Bitmap? {
 private fun skinBodyPartLabel(id: String): String {
     val option = BODY_PARTS.firstOrNull { it.id == id }
     return option?.let { stringResource(it.labelRes) } ?: id
+}
+
+@Composable
+private fun SkinBodyPartDropdownFilter(
+    selectedPart: String,
+    onSelectPart: (String) -> Unit,
+    records: List<SkinRecord>,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val currentOption = remember(selectedPart) {
+        BODY_PARTS.firstOrNull { it.id == selectedPart } ?: BODY_PARTS.first()
+    }
+    val currentLabel = stringResource(currentOption.labelRes)
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = "Filter Area Tubuh",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Surface(
+            onClick = { isExpanded = !isExpanded },
+            shape = RoundedCornerShape(12.dp),
+            color = if (selectedPart != "all") MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            border = BorderStroke(
+                1.dp,
+                if (selectedPart != "all") MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MedBotSpacing.medium, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = if (selectedPart != "all") Icons.Filled.FilterList else Icons.Filled.Category,
+                        contentDescription = null,
+                        tint = if (selectedPart != "all") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = if (selectedPart == "all") "Semua Area Tubuh (${records.size} Foto)"
+                        else "$currentLabel (${records.count { it.bodyPart == selectedPart }} Foto)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (selectedPart != "all") FontWeight.Bold else FontWeight.Medium,
+                        color = if (selectedPart != "all") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (selectedPart != "all") {
+                        IconButton(
+                            onClick = { onSelectPart("all") },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Reset Filter",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    BODY_PARTS.forEach { part ->
+                        val isSelected = selectedPart == part.id
+                        val count = if (part.id == "all") records.size else records.count { it.bodyPart == part.id }
+                        val label = stringResource(part.labelRes)
+
+                        Surface(
+                            onClick = {
+                                onSelectPart(part.id)
+                                isExpanded = false
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (count > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Text(
+                                                text = "$count",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkinBodyPartDropdownSelector(
+    selectedPart: String,
+    onSelectPart: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val currentOption = remember(selectedPart) {
+        BODY_PARTS.firstOrNull { it.id == selectedPart }
+    }
+    val currentLabel = currentOption?.let { stringResource(it.labelRes) } ?: ""
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MedBotSpacing.small)
+    ) {
+        Text(
+            text = stringResource(R.string.skin_body_part),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = stringResource(R.string.skin_body_part_required),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Surface(
+            onClick = { isExpanded = !isExpanded },
+            shape = RoundedCornerShape(12.dp),
+            color = if (selectedPart.isNotBlank()) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            border = BorderStroke(
+                1.dp,
+                if (selectedPart.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = MedBotSpacing.medium, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AccessibilityNew,
+                        contentDescription = null,
+                        tint = if (selectedPart.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = if (selectedPart.isNotBlank()) currentLabel else "Pilih lokasi tubuh foto...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (selectedPart.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selectedPart.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Icon(
+                    imageVector = if (isExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+                shadowElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    BODY_PARTS.drop(1).forEach { part ->
+                        val isSelected = selectedPart == part.id
+                        val label = stringResource(part.labelRes)
+
+                        Surface(
+                            onClick = {
+                                onSelectPart(part.id)
+                                isExpanded = false
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

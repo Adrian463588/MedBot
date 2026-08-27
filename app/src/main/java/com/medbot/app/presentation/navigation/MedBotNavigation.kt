@@ -9,9 +9,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -51,15 +53,27 @@ object MedBotRoute {
 
 private val rootRoutes = setOf(
     MedBotRoute.HOME,
+    MedBotRoute.CHAT,
     MedBotRoute.SKIN_LINEAGE,
     MedBotRoute.KNOWLEDGE,
     MedBotRoute.TOOLS
 )
 
 @Composable
-fun MedBotNavigation(navController: NavHostController = rememberNavController()) {
+fun MedBotNavigation(
+    startDestination: String = MedBotRoute.HOME,
+    navController: NavHostController = rememberNavController()
+) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route?.substringBefore("?") ?: MedBotRoute.HOME
+
+    LaunchedEffect(startDestination) {
+        if (startDestination != MedBotRoute.HOME && currentRoute != startDestination) {
+            navController.navigate(startDestination) {
+                launchSingleTop = true
+            }
+        }
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val windowWidth = when {
@@ -103,7 +117,7 @@ fun MedBotNavigation(navController: NavHostController = rememberNavController())
                                     if (sessionId == null) MedBotRoute.CHAT else "${MedBotRoute.CHAT}?sessionId=$sessionId"
                                 )
                             },
-                            onNavigateToSkinScan = { navigateSingleTop(navController, MedBotRoute.SKIN_SCAN) },
+                            onNavigateToSkin = { navigateSingleTop(navController, MedBotRoute.SKIN_LINEAGE) },
                             onNavigateToKnowledge = { navigateSingleTop(navController, MedBotRoute.KNOWLEDGE) },
                             onNavigateToModels = { navigateSingleTop(navController, MedBotRoute.MODELS) },
                             onNavigateToPersona = { navigateSingleTop(navController, MedBotRoute.PERSONA) },
@@ -173,11 +187,17 @@ private fun navigateToRoot(
     route: String,
     currentRoute: String
 ) {
-    if (route == currentRoute) return
-    navController.navigate(route) {
-        popUpTo(navController.graph.startDestinationId) { saveState = true }
-        launchSingleTop = true
-        restoreState = true
+    if (route == currentRoute) {
+        // Tapping the currently active bottom bar menu pops any nested dialogs/states back to the main screen
+        navController.popBackStack(route, inclusive = false)
+    } else {
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = false
+        }
     }
 }
 

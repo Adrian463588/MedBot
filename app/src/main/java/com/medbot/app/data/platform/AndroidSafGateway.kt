@@ -17,6 +17,7 @@ import com.medbot.app.domain.repository.StoredModelArtifact
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -44,6 +45,9 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
     override suspend fun materialize(uriString: String): Result<SafDocumentSource> = withContext(Dispatchers.IO) {
         runCatching {
             val uri = parseUri(uriString)
+            // OpenDocument grants a transient read permission. Persist it at
+            // the boundary so a citation can be opened after process restart.
+            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             val fileName = queryDisplayName(uri)
                 ?: throw IOException("The selected document has no display name")
             val mimeType = resolver.getType(uri).orEmpty()
@@ -111,6 +115,15 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
         if (!DocumentsContract.isTreeUri(treeUri)) {
             throw ModelStorageException(ModelStorageFailureCode.NOT_TREE_URI, "Model destination must be a SAF tree URI")
         }
+        val hasPersistedWritePermission = resolver.persistedUriPermissions.any {
+            it.uri == treeUri && it.isWritePermission
+        }
+        if (!hasPersistedWritePermission) {
+            throw ModelStorageException(
+                ModelStorageFailureCode.PERMISSION_REQUIRED,
+                "Write permission for the model folder is unavailable"
+            )
+        }
         val metadata = queryDocumentMetadata(treeUri)
         if (metadata.mimeType != DocumentsContract.Document.MIME_TYPE_DIR) {
             throw ModelStorageException(ModelStorageFailureCode.NOT_DIRECTORY, "Model destination is not a folder")
@@ -134,11 +147,23 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
         if (!DocumentsContract.isTreeUri(treeUri)) {
             throw ModelStorageException(ModelStorageFailureCode.NOT_TREE_URI, "Model destination must be a SAF tree URI")
         }
-        resolver.takePersistableUriPermission(
-            treeUri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        )
+        val hasPersisted = resolver.persistedUriPermissions.any {
+            it.uri == treeUri && it.isWritePermission
+        }
+        if (!hasPersisted) {
+            resolver.takePersistableUriPermission(
+                treeUri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }
     }.recoverCatching { error ->
+        val treeUri = runCatching { parseUri(treeUriString) }.getOrNull()
+        val hasPersisted = treeUri != null && resolver.persistedUriPermissions.any {
+            it.uri == treeUri && it.isWritePermission
+        }
+        if (hasPersisted) {
+            return@recoverCatching
+        }
         if (error is SecurityException) {
             throw ModelStorageException(
                 ModelStorageFailureCode.PERMISSION_REQUIRED,
@@ -148,6 +173,26 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
         }
         throw error
     }
+
+    override fun discoverPersistedDestination(candidateFileNames: Set<String>): Result<ModelStorageDestination?> =
+        runCatching {
+            val names = candidateFileNames
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+                .toSet()
+            if (names.isEmpty()) return@runCatching null
+
+            resolver.persistedUriPermissions
+                .asSequence()
+                .filter { it.isWritePermission }
+                .map { it.uri.toString() }
+                .mapNotNull { treeUri -> validateDestination(treeUri).getOrNull() }
+                .firstOrNull { destination ->
+                    names.any { fileName ->
+                        findArtifact(destination.treeUri, fileName).getOrNull() != null
+                    }
+                }
+        }
 
     override fun findArtifact(treeUriString: String, displayName: String): Result<StoredModelArtifact?> = runCatching {
         val treeUri = requireWritableTree(treeUriString)
@@ -259,14 +304,36 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
     }
 
     override fun getResumeValidator(treeUri: String, displayName: String): Result<String?> = runCatching {
+        val metadataName = resumeMetadataFileName(displayName)
+        val metadataArtifact = findArtifact(treeUri, metadataName).getOrThrow()
+        if (metadataArtifact != null) {
+            return@runCatching readResumeMetadata(metadataArtifact.documentUri)
+        }
+        // Migration fallback for partials created before resume metadata moved
+        // into SAF. The next successful response writes the sidecar.
         modelMetadataPreferences.getString(resumeKey(treeUri, displayName), null)
     }
 
     override fun setResumeValidator(treeUri: String, displayName: String, etag: String?): Result<Unit> = runCatching {
-        val key = resumeKey(treeUri, displayName)
-        val editor = modelMetadataPreferences.edit()
-        if (etag.isNullOrBlank()) editor.remove(key) else editor.putString(key, etag)
-        editor.apply()
+        val metadataName = resumeMetadataFileName(displayName)
+        val metadataArtifact = findArtifact(treeUri, metadataName).getOrThrow()
+        if (etag.isNullOrBlank()) {
+            metadataArtifact?.let { deleteArtifact(it.documentUri).getOrThrow() }
+            modelMetadataPreferences.edit().remove(resumeKey(treeUri, displayName)).apply()
+            return@runCatching
+        }
+
+        val normalized = etag.trim()
+        require(normalized.length <= MAX_RESUME_METADATA_BYTES)
+        require(!normalized.contains('\n') && !normalized.contains('\r'))
+        val target = metadataArtifact ?: createArtifact(treeUri, metadataName).getOrThrow()
+        openOutputStream(target.documentUri, append = false).getOrThrow().use { output ->
+            output.write(normalized.toByteArray(Charsets.UTF_8))
+            output.flush()
+        }
+        // SAF is now the source of truth; remove the app-private copy after
+        // successfully writing the sidecar.
+        modelMetadataPreferences.edit().remove(resumeKey(treeUri, displayName)).apply()
     }
 
     private fun requireWritableTree(treeUriString: String): Uri {
@@ -343,6 +410,37 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
         return "etag_${digest.joinToString("") { "%02x".format(it) }}"
     }
 
+    private fun resumeMetadataFileName(displayName: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(displayName.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return "medbot_resume_${digest.take(24)}.txt"
+    }
+
+    private fun readResumeMetadata(documentUri: String): String? {
+        val output = ByteArrayOutputStream()
+        openInputStream(documentUri).getOrThrow().use { input ->
+            val buffer = ByteArray(128)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                total += count
+                if (total > MAX_RESUME_METADATA_BYTES) {
+                    throw ModelStorageException(
+                        ModelStorageFailureCode.IO_ERROR,
+                        "Resume metadata is oversized"
+                    )
+                }
+                output.write(buffer, 0, count)
+            }
+        }
+        return output.toString(Charsets.UTF_8.name())
+            .trim()
+            .takeIf { it.isNotEmpty() }
+    }
+
     private data class DocumentMetadata(
         val displayName: String?,
         val mimeType: String?,
@@ -356,6 +454,7 @@ class AndroidSafGateway(context: Context) : SafDocumentGateway, ModelFileGateway
 
     companion object {
         private const val BUFFER_SIZE = 1024 * 1024
+        private const val MAX_RESUME_METADATA_BYTES = 1024
         private val SHA256_PATTERN = Regex("[0-9a-fA-F]{64}")
     }
 }

@@ -2,6 +2,7 @@ package com.medbot.app
 
 import com.medbot.app.data.ai.ModelRegistry
 import com.medbot.app.domain.model.ModelCapability
+import com.medbot.app.domain.model.ModelAccessRequirement
 import com.medbot.app.domain.model.ModelFormat
 import com.medbot.app.domain.model.ModelManifest
 import com.medbot.app.domain.model.ModelManifestFailure
@@ -72,6 +73,24 @@ class ModelManifestValidationTest {
         assertTrue(ModelRegistry.getManifestById("test-model") == null)
         assertTrue(!ModelRegistry.registerCustomManifest(manifest()))
         assertTrue(ModelRegistry.getAllModels().all { ModelManifestValidator.isVerified(it) })
+    }
+
+    @Test
+    fun medGemmaVisionManifestUsesOfficialArtifactMetadataAndGatedAccess() {
+        val manifest = ModelRegistry.getManifestById("medgemma-1-5-4b-it-vision")
+
+        requireNotNull(manifest)
+        assertEquals(
+            "https://huggingface.co/litert-community/MedGemma-1.5-4B-IT/resolve/9bcaf1a255db7a73120b1ff6baa5015512569cd2/medgemma-1.5-4b-it_q4_block32_vision_ekv2048.litertlm",
+            manifest.downloadUrl
+        )
+        assertEquals(3_023_069_488L, manifest.sizeBytes)
+        assertEquals(
+            "1627e2e433c3799e4ff06ff0895408ca65b255f786dc270fb5cfa325e349233a",
+            manifest.sha256
+        )
+        assertEquals(ModelAccessRequirement.HAI_DEF_ACCEPTANCE_AND_AUTHENTICATION, manifest.accessRequirement)
+        assertTrue(ModelManifestValidator.isVerified(manifest))
     }
 
     private fun manifest(

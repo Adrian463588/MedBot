@@ -1,19 +1,48 @@
 package com.medbot.app.domain.agents.tools
 
 object ToolRegistry {
-    private val toolsMap: Map<String, LocalMedicalTool> = listOf(
-        UrgencyAssessorTool(),
-        ZScoreCalculatorTool(),
-        PaediatricDosingTool(),
-        SkinAbcdEvaluatorTool(),
-        BmiCalculatorTool(),
-        DueDateCalculatorTool(),
-        LabInterpreterTool(),
-        CapabilityUnavailableTool("get_drug_info", "Database obat terverifikasi belum tersedia di perangkat."),
-        CapabilityUnavailableTool("manage_chronic_disease", "Panduan penyakit kronis tervalidasi belum tersedia di perangkat."),
-        CapabilityUnavailableTool("check_drug_interaction", "Database interaksi obat terverifikasi belum tersedia di perangkat."),
-        CapabilityUnavailableTool("search_skin_remedy", "Database perawatan kulit terverifikasi belum tersedia di perangkat.")
-    ).associateBy { it.name }
+    @Volatile
+    private var drugRepository: com.medbot.app.domain.repository.DrugRepository? = null
+
+    fun registerDrugRepository(repo: com.medbot.app.domain.repository.DrugRepository) {
+        this.drugRepository = repo
+        rebuildTools()
+    }
+
+    private var toolsMap: Map<String, LocalMedicalTool> = createDefaultTools()
+
+    private fun rebuildTools() {
+        toolsMap = createDefaultTools()
+    }
+
+    private fun createDefaultTools(): Map<String, LocalMedicalTool> {
+        val repo = drugRepository
+        val drugInfoTool = if (repo != null) {
+            DrugInfoTool { drugRepository }
+        } else {
+            CapabilityUnavailableTool("get_drug_info", "Database obat terverifikasi belum tersedia di perangkat.")
+        }
+
+        val interactionTool = if (repo != null) {
+            CheckDrugInteractionTool { drugRepository }
+        } else {
+            CapabilityUnavailableTool("check_drug_interaction", "Database interaksi obat terverifikasi belum tersedia di perangkat.")
+        }
+
+        return listOf(
+            UrgencyAssessorTool(),
+            ZScoreCalculatorTool(),
+            PaediatricDosingTool(),
+            SkinAbcdEvaluatorTool(),
+            BmiCalculatorTool(),
+            DueDateCalculatorTool(),
+            LabInterpreterTool(),
+            drugInfoTool,
+            interactionTool,
+            CapabilityUnavailableTool("manage_chronic_disease", "Panduan penyakit kronis tervalidasi belum tersedia di perangkat."),
+            CapabilityUnavailableTool("search_skin_remedy", "Database perawatan kulit terverifikasi belum tersedia di perangkat.")
+        ).associateBy { it.name }
+    }
 
     fun getTool(name: String): LocalMedicalTool? = toolsMap[name]
 

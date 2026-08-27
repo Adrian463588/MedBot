@@ -43,6 +43,10 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        // The embedding model must remain uncompressed so LiteRT can memory-map it.
+        noCompress += "tflite"
+    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -102,11 +106,16 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.litertlm.android)
+    implementation(libs.litert)
+    implementation(libs.litert.support)
     implementation(libs.pdfbox.android)
 
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Android's framework org.json is stubbed in local JVM tests; use the
+    // equivalent implementation only for parser contract tests.
+    testImplementation(libs.org.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

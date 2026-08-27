@@ -11,8 +11,8 @@ class TriageOrchestrator {
 
         // Red flags take precedence over modality routing. Image metadata must
         // never downgrade an emergency text query.
-        val initialUrgency = ToolRegistry.executeTool("assess_urgency", mapOf("query" to query))
-        if (initialUrgency.data["urgencyLevel"] == UrgencyLevel.EMERGENCY.name) {
+        val urgencyToolResult = ToolRegistry.executeTool("assess_urgency", mapOf("query" to query))
+        if (urgencyToolResult.data["urgencyLevel"] == UrgencyLevel.EMERGENCY.name) {
             return OrchestratorResult(
                 primarySpecialist = "emergency_medicine",
                 secondarySpecialists = listOf("general_practice", "cardiology"),
@@ -51,8 +51,9 @@ class TriageOrchestrator {
             )
         }
 
-        // 2. Emergency check
-        val urgencyToolResult = ToolRegistry.executeTool("assess_urgency", mapOf("query" to query))
+        // 2. The red-flag assessment above is also the sole urgency source for
+        // this turn. Reusing it keeps triage deterministic and avoids running
+        // a stateful tool twice before retrieval.
         val detectedUrgency = when (urgencyToolResult.data["urgencyLevel"]) {
             "EMERGENCY" -> UrgencyLevel.EMERGENCY
             "HIGH" -> UrgencyLevel.HIGH

@@ -29,6 +29,11 @@ class UserPreferencesManager(context: Context) : UserPreferencesRepository {
     )
     override val activeLanguage: Flow<AppLanguage> = _activeLanguage.asStateFlow()
 
+    private val _onlineEvidenceEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_ONLINE_EVIDENCE_ENABLED, false)
+    )
+    override val onlineEvidenceEnabled: Flow<Boolean> = _onlineEvidenceEnabled.asStateFlow()
+
     private fun loadPersonaConfig(): PersonaConfig {
         val agentId = prefs.getString(KEY_AGENT_ID, "orchestrator") ?: "orchestrator"
         val toneName = prefs.getString(KEY_TONE, PersonaTone.EMPATHETIC.name) ?: PersonaTone.EMPATHETIC.name
@@ -79,6 +84,11 @@ class UserPreferencesManager(context: Context) : UserPreferencesRepository {
         _personaConfig.value = _personaConfig.value.copy(language = language)
     }
 
+    override suspend fun setOnlineEvidenceEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_ONLINE_EVIDENCE_ENABLED, enabled).apply()
+        _onlineEvidenceEnabled.value = enabled
+    }
+
     companion object {
         private const val KEY_AGENT_ID = "persona_agent_id"
         private const val KEY_TONE = "persona_tone"
@@ -88,5 +98,6 @@ class UserPreferencesManager(context: Context) : UserPreferencesRepository {
         private const val KEY_PATIENT_PROFILE = "persona_patient_profile"
         private const val KEY_SAF_MODEL_URI = "saf_model_folder_uri"
         private const val KEY_SAF_RAG_URI = "saf_rag_folder_uri"
+        private const val KEY_ONLINE_EVIDENCE_ENABLED = "online_evidence_enabled"
     }
 }

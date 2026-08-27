@@ -27,12 +27,29 @@ fun personaToneLabel(tone: PersonaTone): String = when (tone) {
     PersonaTone.EDUCATIONAL -> stringResource(R.string.persona_tone_educational)
 }
 
+/** Returns the localized description for a persona tone. */
+@Composable
+fun personaToneDescription(tone: PersonaTone): String = when (tone) {
+    PersonaTone.EMPATHETIC -> stringResource(R.string.persona_tone_empathetic_desc)
+    PersonaTone.CLINICAL -> stringResource(R.string.persona_tone_clinical_desc)
+    PersonaTone.CONCISE -> stringResource(R.string.persona_tone_concise_desc)
+    PersonaTone.EDUCATIONAL -> stringResource(R.string.persona_tone_educational_desc)
+}
+
 /** Returns the localized label for response depth. */
 @Composable
 fun detailDepthLabel(depth: DetailDepth): String = when (depth) {
     DetailDepth.SIMPLE -> stringResource(R.string.persona_depth_simple)
     DetailDepth.STANDARD -> stringResource(R.string.persona_depth_standard)
     DetailDepth.DEEP -> stringResource(R.string.persona_depth_deep)
+}
+
+/** Returns the localized description for response depth. */
+@Composable
+fun detailDepthDescription(depth: DetailDepth): String = when (depth) {
+    DetailDepth.SIMPLE -> stringResource(R.string.persona_depth_simple_desc)
+    DetailDepth.STANDARD -> stringResource(R.string.persona_depth_standard_desc)
+    DetailDepth.DEEP -> stringResource(R.string.persona_depth_deep_desc)
 }
 
 /** Returns the agent name stored for the selected response language. */

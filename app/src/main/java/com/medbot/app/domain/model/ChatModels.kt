@@ -88,11 +88,40 @@ enum class UrgencyLevel(val labelId: String, val labelEn: String, val hexColor: 
 }
 
 data class Citation(
+    /** Stable identifier used to bind a displayed claim to one evidence item. */
+    val citationId: String = "",
     val documentTitle: String,
-    val pageNumber: Int,
+    val pageNumber: Int = 0,
     val snippet: String,
-    val sectionTitle: String = ""
+    val sectionTitle: String = "",
+    /** Empty for local files; HTTPS only for allowlisted online sources. */
+    val sourceUrl: String = "",
+    /** Persisted SAF URI for a user-selected local source, when permission remains valid. */
+    val sourceUri: String = "",
+    val sourceName: String = "",
+    /** Stable source classification, kept as a serialized value at the UI boundary. */
+    val sourceRole: String = "",
+    val sourceSha256: String = "",
+    val recordId: String = "",
+    val revision: String = "",
+    val retrievedAt: Long? = null
 )
+
+enum class ChatGenerationPhase {
+    IDLE,
+    CHECKING_MODEL,
+    INDEXING_KNOWLEDGE,
+    PREPARING,
+    RETRIEVING_LOCAL_EVIDENCE,
+    SEARCHING_LOCAL,
+    SEARCHING_WEB,
+    INFERENCING,
+    GENERATING,
+    READY,
+    UNAVAILABLE,
+    ERROR,
+    CANCELLED
+}
 
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),

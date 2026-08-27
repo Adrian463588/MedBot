@@ -73,4 +73,28 @@ class DocumentChunkerAndSearchTest {
         assertEquals("Panduan DBD", results.first().documentTitle)
         assertEquals(1f, results.first().similarityScore, 0f)
     }
+
+    @Test
+    fun `VectorSearchEngine keeps exact clinical terms grounded when semantic score is low`() {
+        val vectorEngine = VectorSearchEngine()
+        val chunk = DocChunk(
+            id = "diare",
+            docId = "doc",
+            chunkIndex = 0,
+            textContent = "Diare akut: berikan cairan dan evaluasi tanda dehidrasi.",
+            pageNumber = 1,
+            sectionTitle = "Diare",
+            embedding = floatArrayOf(0f, 1f)
+        )
+
+        val results = vectorEngine.searchTopK(
+            queryVector = floatArrayOf(1f, 0f),
+            chunksWithTitle = listOf(chunk to "Panduan FKTP"),
+            minSimilarity = 0.95f,
+            queryText = "obat diare"
+        )
+
+        assertEquals("Panduan FKTP", results.single().documentTitle)
+        assertTrue(results.single().chunk.textContent.contains("Diare"))
+    }
 }

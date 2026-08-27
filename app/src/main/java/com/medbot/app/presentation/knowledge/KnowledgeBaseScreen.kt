@@ -55,6 +55,8 @@ import com.medbot.app.core.designsystem.components.MedBotTopAppBar
 import com.medbot.app.core.designsystem.components.springBounceClick
 import com.medbot.app.domain.model.RagDocument
 import com.medbot.app.domain.model.SearchResult
+import com.medbot.app.data.rag.BankBookCorpusManifest
+import com.medbot.app.data.rag.BundledKnowledgeState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,6 +67,7 @@ fun KnowledgeBaseScreen(viewModel: KnowledgeViewModel, onNavigateBack: () -> Uni
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
     val isIngesting by viewModel.isIngesting.collectAsStateWithLifecycle()
     val message by viewModel.ingestMessage.collectAsStateWithLifecycle()
+    val bundledKnowledgeState by viewModel.bundledKnowledgeState.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var selectedDocumentId by rememberSaveable { mutableStateOf<String?>(null) }
     val selectedDocument = documents.firstOrNull { it.id == selectedDocumentId }
@@ -80,7 +83,9 @@ fun KnowledgeBaseScreen(viewModel: KnowledgeViewModel, onNavigateBack: () -> Uni
                 "application/pdf",
                 "text/plain",
                 "text/markdown",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "application/json",
+                "application/x-ndjson"
             )
         )
     }
@@ -119,6 +124,7 @@ fun KnowledgeBaseScreen(viewModel: KnowledgeViewModel, onNavigateBack: () -> Uni
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                BundledKnowledgeStatus(bundledKnowledgeState)
                                 Button(
                                     onClick = launchPicker,
                                     enabled = !isIngesting,
@@ -185,7 +191,8 @@ fun KnowledgeBaseScreen(viewModel: KnowledgeViewModel, onNavigateBack: () -> Uni
                                     onDelete = {
                                         if (selectedDocumentId == document.id) selectedDocumentId = null
                                          viewModel.onEvent(KnowledgeUiEvent.DeleteDocument(document.id))
-                                    }
+                                    },
+                                    allowDelete = !document.fileUri.startsWith("asset://")
                                 )
                             }
                         }
@@ -207,6 +214,52 @@ fun KnowledgeBaseScreen(viewModel: KnowledgeViewModel, onNavigateBack: () -> Uni
                         KnowledgeDocumentDetail(selectedDocument)
                     }
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BundledKnowledgeStatus(state: BundledKnowledgeState) {
+    val (title, body, color) = when (state) {
+        BundledKnowledgeState.NotStarted -> Triple(
+            stringResource(R.string.knowledge_bankbook_title),
+            stringResource(R.string.knowledge_bankbook_waiting),
+            MaterialTheme.colorScheme.surfaceVariant
+        )
+        BundledKnowledgeState.Indexing -> Triple(
+            stringResource(R.string.knowledge_bankbook_title),
+            stringResource(R.string.knowledge_bankbook_indexing),
+            MaterialTheme.colorScheme.secondaryContainer
+        )
+        is BundledKnowledgeState.Ready -> Triple(
+            stringResource(R.string.knowledge_bankbook_ready_title),
+            stringResource(
+                R.string.knowledge_bankbook_ready,
+                state.document.chunkCount,
+                BankBookCorpusManifest.RECORD_COUNT,
+                BankBookCorpusManifest.SHA256
+            ),
+            MaterialTheme.colorScheme.primaryContainer
+        )
+        is BundledKnowledgeState.Failed -> Triple(
+            stringResource(R.string.knowledge_bankbook_failed_title),
+            stringResource(R.string.knowledge_bankbook_failed, state.reason),
+            MaterialTheme.colorScheme.errorContainer
+        )
+    }
+    Surface(
+        color = color,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(MedBotSpacing.medium), verticalArrangement = Arrangement.spacedBy(MedBotSpacing.xSmall)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(body, style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = stringResource(R.string.knowledge_bankbook_source, BankBookCorpusManifest.SOURCE, BankBookCorpusManifest.VERSION),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -246,7 +299,13 @@ private fun SearchResultRow(result: SearchResult, onClick: () -> Unit) {
 }
 
 @Composable
-private fun DocumentRow(document: RagDocument, selected: Boolean, onSelect: () -> Unit, onDelete: () -> Unit) {
+private fun DocumentRow(
+    document: RagDocument,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onDelete: () -> Unit,
+    allowDelete: Boolean
+) {
     val date = rememberDocumentDate(document.indexedAt)
     Surface(
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
@@ -266,8 +325,10 @@ private fun DocumentRow(document: RagDocument, selected: Boolean, onSelect: () -
                 }
                 Text(metadata, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
-                Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
+            if (allowDelete) {
+                IconButton(onClick = onDelete, modifier = Modifier.springBounceClick()) {
+                    Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }

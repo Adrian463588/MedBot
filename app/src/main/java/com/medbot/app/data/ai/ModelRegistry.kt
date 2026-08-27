@@ -3,24 +3,44 @@ package com.medbot.app.data.ai
 import com.medbot.app.domain.model.ModelManifest
 import com.medbot.app.domain.model.ModelCapability
 import com.medbot.app.domain.model.ModelFormat
+import com.medbot.app.domain.model.ModelAccessRequirement
 
 /**
  * Release-owned LiteRT-LM manifest registry.
  *
- * Entries are pinned to official HTTPS sources with exact byte size, SHA-256,
- * source revision, provenance, and an explicit runtime capability. A download
- * is still unavailable until the received SAF bytes pass the same contract and
- * LiteRT-LM initializes them successfully on the device.
+ * Entries are pinned to official HTTPS sources with exact byte size, source
+ * revision, provenance, and an explicit runtime capability. A download is
+ * still unavailable until the received SAF bytes pass the effective verified
+ * contract and LiteRT-LM initializes them successfully on the device.
  */
 object ModelRegistry {
     /**
      * Release-owned manifests pinned to immutable Hugging Face revisions.
      *
-     * The SHA-256 values are the official LFS content OIDs for the exact
-     * artifacts below. The downloader still hashes every received byte before
-     * it promotes a SAF `.part` document to the final model name.
-     */
+     * Public artifacts carry their verified LFS content OID here. Gated
+     * artifacts may replace this bootstrap value with the authenticated
+     * repository metadata before transfer; the downloader still hashes every
+     * received byte before it promotes a SAF `.part` document to the final
+     * model name.
+    */
     val OFFICIAL_MODELS: List<ModelManifest> = listOf(
+        ModelManifest(
+            id = "qwen3-0-6b-nothink",
+            displayName = "Qwen3 0.6B Direct (Recommended)",
+            version = "main@6aa2daf8",
+            format = ModelFormat.LITERTLM,
+            downloadUrl = "https://huggingface.co/litert-community/Qwen3-0.6B-int4/resolve/6aa2daf8aba4aa456797fb8040b36a3948bcfda7/qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm",
+            sizeBytes = 347_251_840L,
+            sha256 = "2df6821ec12702dafd33915e7a1a1adc7c4b053f3672fd9555dfaf3a114c4139",
+            minimumRamMb = 1024,
+            isMultimodal = false,
+            recommendedBackend = "CPU",
+            description = "Direct-answer LiteRT-LM model with thinking disabled in the verified artifact for faster on-device chat.",
+            fileName = "qwen3_0.6b_nothink_q4_block32_ekv1280.litertlm",
+            provenance = "Hugging Face litert-community/Qwen3-0.6B-int4 model card; verified no-think LiteRT-LM artifact",
+            sourceRevision = "6aa2daf8aba4aa456797fb8040b36a3948bcfda7",
+            capability = ModelCapability.TEXT
+        ),
         ModelManifest(
             id = "qwen3-0-6b",
             displayName = "Qwen3 0.6B (Text)",
@@ -88,6 +108,25 @@ object ModelRegistry {
             provenance = "Hugging Face litert-community/gemma-4-E2B-it-litert-lm model card; official LiteRT Community LFS artifact",
             sourceRevision = "6b78abd019e61a1ca4cbe3b212d2c9ce8ff38a94",
             capability = ModelCapability.TEXT
+        ),
+        ModelManifest(
+            id = "medgemma-1-5-4b-it-vision",
+            displayName = "MedGemma 1.5 4B IT (Vision)",
+            version = "artifact@9bcaf1a2",
+            format = ModelFormat.LITERTLM,
+            downloadUrl = "https://huggingface.co/litert-community/MedGemma-1.5-4B-IT/resolve/9bcaf1a255db7a73120b1ff6baa5015512569cd2/medgemma-1.5-4b-it_q4_block32_vision_ekv2048.litertlm",
+            sourcePageUrl = "https://huggingface.co/litert-community/MedGemma-1.5-4B-IT",
+            sizeBytes = 3_023_069_488L,
+            sha256 = "1627e2e433c3799e4ff06ff0895408ca65b255f786dc270fb5cfa325e349233a",
+            minimumRamMb = 4096,
+            isMultimodal = true,
+            recommendedBackend = "GPU",
+            description = "Official MedGemma 1.5 4B IT LiteRT-LM vision artifact for local clinical image and text analysis after verified source access.",
+            fileName = "medgemma-1.5-4b-it_q4_block32_vision_ekv2048.litertlm",
+            provenance = "Official Hugging Face litert-community/MedGemma-1.5-4B-IT model card; HAI-DEF gated source; LFS SHA-256 and byte size verified from the official repository API",
+            sourceRevision = "9bcaf1a255db7a73120b1ff6baa5015512569cd2",
+            capability = ModelCapability.VISION,
+            accessRequirement = ModelAccessRequirement.HAI_DEF_ACCEPTANCE_AND_AUTHENTICATION
         )
     )
 

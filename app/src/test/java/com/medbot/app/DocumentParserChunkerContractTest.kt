@@ -83,6 +83,27 @@ class DocumentParserChunkerContractTest {
     }
 
     @Test
+    fun `jsonl parser keeps chunk id nested sections and source provenance`() {
+        val json = """
+            {"chunk_id":"ppk_diare_001","title":"Diare","source_type":"national_clinical_guideline","source_url":"https://example.invalid/source","revision":"2026-01","sections":[{"heading":"Penatalaksanaan","content":"Rehidrasi sesuai kondisi."}]}
+        """.trimIndent()
+
+        val parsed = DocumentParser().parse(
+            ByteArrayInputStream(json.toByteArray()),
+            "clinical.jsonl",
+            "application/x-ndjson"
+        )
+
+        val page = parsed.pages.single()
+        assertEquals("ppk_diare_001", page.recordId)
+        assertEquals("national_clinical_guideline", page.sourceRole)
+        assertEquals("https://example.invalid/source", page.sourceUrl)
+        assertEquals("2026-01", page.revision)
+        assertTrue(page.text.contains("Penatalaksanaan"))
+        assertTrue(page.text.contains("Rehidrasi"))
+    }
+
+    @Test
     fun `chunker fails closed when the real embedder is unavailable`() {
         val parsed = ParsedDocument(
             fileName = "fixture.txt",

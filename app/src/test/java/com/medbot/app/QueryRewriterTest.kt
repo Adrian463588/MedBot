@@ -20,4 +20,16 @@ class QueryRewriterTest {
         assertTrue(rewritten.contains("demam tinggi"))
         assertTrue(rewritten.contains("Obat apa yang cocok untuk itu?"))
     }
+
+    @Test
+    fun `medical word containing it does not pull unrelated history into retrieval`() {
+        val rewriter = QueryRewriter()
+        val history = listOf(
+            ChatMessage(sessionId = "s1", text = "Saya demam tinggi.", isUser = true)
+        )
+
+        val rewritten = rewriter.rewriteQueryWithHistory("Saya sakit diare", history)
+
+        assertTrue(rewritten == "Saya sakit diare")
+    }
 }

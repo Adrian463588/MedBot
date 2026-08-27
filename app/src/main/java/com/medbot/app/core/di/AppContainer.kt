@@ -6,6 +6,10 @@ import com.medbot.app.data.ai.LlmInferenceEngine
 import com.medbot.app.data.download.ModelDownloadManager
 import com.medbot.app.data.local.database.MedBotDatabase
 import com.medbot.app.data.rag.RagOrchestrator
+import com.medbot.app.data.rag.LocalEmbedder
+import com.medbot.app.data.rag.BundledKnowledgeSeeder
+import com.medbot.app.data.rag.RagClinicalEvidenceRepository
+import com.medbot.app.data.online.AndroidOnlineEvidenceRepository
 import com.medbot.app.data.repository.*
 import com.medbot.app.data.vision.SkinDiagnosisEngine
 import com.medbot.app.domain.repository.*
@@ -30,7 +34,11 @@ class AppContainer(private val context: Context) {
     }
 
     val ragOrchestrator: RagOrchestrator by lazy {
-        RagOrchestrator(database.ragDao())
+        RagOrchestrator(ragDao = database.ragDao(), embedder = LocalEmbedder(context.applicationContext))
+    }
+
+    val bundledKnowledgeSeeder: BundledKnowledgeSeeder by lazy {
+        BundledKnowledgeSeeder(context.applicationContext, ragOrchestrator)
     }
 
     val skinDiagnosisEngine: SkinDiagnosisEngine by lazy {
@@ -47,7 +55,15 @@ class AppContainer(private val context: Context) {
     }
 
     val ragRepository: RagRepository by lazy {
-        RagRepositoryImpl(ragOrchestrator)
+        RagRepositoryImpl(ragOrchestrator, bundledKnowledgeSeeder)
+    }
+
+    val clinicalEvidenceRepository: ClinicalEvidenceRepository by lazy {
+        RagClinicalEvidenceRepository(ragRepository)
+    }
+
+    val onlineEvidenceRepository: OnlineEvidenceRepository by lazy {
+        AndroidOnlineEvidenceRepository(context.applicationContext)
     }
 
     val skinRepository: SkinRepository by lazy {
@@ -55,7 +71,9 @@ class AppContainer(private val context: Context) {
     }
 
     val drugRepository: DrugRepository by lazy {
-        DrugRepositoryImpl(database.drugDao())
+        val repo = DrugRepositoryImpl(context, database.drugDao())
+        com.medbot.app.domain.agents.tools.ToolRegistry.registerDrugRepository(repo)
+        repo
     }
 
     val healthToolsRepository: HealthToolsRepository by lazy {
@@ -67,8 +85,9 @@ class AppContainer(private val context: Context) {
         SendMessageUseCase(
             chatRepository = chatRepository,
             ragRepository = ragRepository,
-            userPrefsRepository = userPreferencesRepository,
-            llmEngine = llmInferenceEngine
+            clinicalEvidenceRepository = clinicalEvidenceRepository,
+            llmEngine = llmInferenceEngine,
+            onlineEvidenceRepository = onlineEvidenceRepository
         )
     }
 

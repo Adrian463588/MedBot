@@ -11,9 +11,21 @@ import java.security.MessageDigest
 import java.util.Locale
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** A source segment with a real page number, or 0 when the format is not paginated. */
-data class ParsedPage(val pageNumber: Int, val text: String, val sectionTitle: String = "")
+data class ParsedPage(
+    val pageNumber: Int,
+    val text: String,
+    val sectionTitle: String = "",
+    val recordId: String = "",
+    val sourceRole: String = "",
+    val sourceUrl: String = "",
+    val sourceSha256: String = "",
+    val revision: String = "",
+    val evidenceKind: String = ""
+)
 
 data class ParsedDocument(
     val fileName: String,
@@ -48,6 +60,12 @@ class DocumentParser {
                 ignoreCase = true
             ) -> {
                 parseDocx(bytes, fileName)
+            }
+            extension == "jsonl" || extension == "ndjson" -> {
+                parseJsonRecords(bytes, fileName, lineDelimited = true)
+            }
+            extension == "json" || mimeType.equals("application/json", ignoreCase = true) -> {
+                parseJsonRecords(bytes, fileName, lineDelimited = false)
             }
             else -> throw RagProcessingException(
                 RagFailureCode.PARSER_UNAVAILABLE,
@@ -150,6 +168,146 @@ class DocumentParser {
             byteSize = bytes.size.toLong(),
             sha256 = sha256(bytes)
         )
+    }
+
+    /**
+     * Parses a user-selected JSON array or JSONL/NDJSON medical corpus. Only
+     * text already present in the record is indexed; missing fields are not
+     * synthesized. This supports real corpora that expose `text`, `rag_chunk`,
+     * `title`, and `source_book` fields. A release-owned JSONL asset may use
+     * this same parser only when its byte checksum and provenance are verified
+     * before it is promoted into Room.
+     */
+    private fun parseJsonRecords(
+        bytes: ByteArray,
+        fileName: String,
+        lineDelimited: Boolean
+    ): ParsedDocument {
+        val sourceText = String(bytes, StandardCharsets.UTF_8)
+        val records = try {
+            if (lineDelimited) {
+                sourceText.lineSequence()
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .map { JSONObject(it) }
+                    .toList()
+            } else {
+                val array = JSONArray(sourceText)
+                List(array.length()) { index -> array.getJSONObject(index) }
+            }
+        } catch (error: Exception) {
+            throw RagProcessingException(
+                RagFailureCode.PARSER_UNAVAILABLE,
+                "JSON corpus could not be read",
+                error
+            )
+        }
+
+        val pages = records.mapNotNull { record ->
+            val directText = sequenceOf(
+                record.optString("text"),
+                record.optString("rag_chunk"),
+                record.optString("content")
+            ).firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+            val sectionText = record.optJSONArray("sections")
+                ?.let(::sectionsToText)
+                .orEmpty()
+            val text = listOf(directText, sectionText)
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString("\n\n")
+            if (text.isBlank()) return@mapNotNull null
+
+            val title = sequenceOf(
+                record.optString("title"),
+                record.optString("id"),
+                fileName
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+            val source = sequenceOf(
+                record.optString("source_book"),
+                record.optString("source"),
+                record.optString("source_type")
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+            val recordId = firstString(record, "record_id", "recordId", "chunk_id", "chunkId", "id")
+            val sourceRole = firstString(record, "source_role", "sourceRole", "source_type")
+            val sourceUrl = firstString(record, "source_url", "sourceUrl", "url")
+            val revision = firstString(record, "revision", "source_revision", "version")
+            val sourceSha256 = firstString(record, "source_sha256", "sourceSha256", "sha256")
+            val evidenceKind = firstString(
+                record,
+                "evidence_kind",
+                "evidenceKind",
+                "content_type",
+                "record_type",
+                // Some release corpora use source_type for both provenance
+                // role and material kind. Preserve it for the typed boundary;
+                // the orchestrator still controls trust and source role.
+                "source_type"
+            )
+            ParsedPage(
+                pageNumber = 0,
+                text = text,
+                sectionTitle = listOf(title, source)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" • "),
+                recordId = recordId,
+                sourceRole = sourceRole,
+                sourceUrl = sourceUrl,
+                sourceSha256 = sourceSha256,
+                revision = revision,
+                evidenceKind = evidenceKind
+            )
+        }
+        if (pages.isEmpty()) {
+            throw RagProcessingException(
+                RagFailureCode.INVALID_DOCUMENT,
+                "JSON corpus contains no records with source text"
+            )
+        }
+        return ParsedDocument(
+            fileName = fileName,
+            pages = pages,
+            totalPageCount = 0,
+            byteSize = bytes.size.toLong(),
+            sha256 = sha256(bytes)
+        )
+    }
+
+    private fun firstString(record: JSONObject, vararg keys: String): String =
+        keys.asSequence()
+            .map { key -> record.optString(key).trim() }
+            .firstOrNull { it.isNotBlank() }
+            .orEmpty()
+
+    private fun sectionsToText(sections: JSONArray): String = buildString {
+        for (index in 0 until sections.length()) {
+            val section = sections.opt(index)
+            when (section) {
+                is JSONObject -> {
+                    val heading = sequenceOf(
+                        section.optString("title"),
+                        section.optString("heading"),
+                        section.optString("section")
+                    ).firstOrNull { it.isNotBlank() }.orEmpty()
+                    val content = sequenceOf(
+                        section.optString("text"),
+                        section.optString("content"),
+                        section.optString("body")
+                    ).firstOrNull { it.isNotBlank() }.orEmpty()
+                    val value = listOf(heading, content)
+                        .filter { it.isNotBlank() }
+                        .joinToString(": ")
+                    if (value.isNotBlank()) {
+                        if (isNotEmpty()) append('\n')
+                        append(value)
+                    }
+                }
+                is String -> if (section.isNotBlank()) {
+                    if (isNotEmpty()) append('\n')
+                    append(section)
+                }
+            }
+        }
     }
 
     private fun parseDocxParagraphs(xmlBytes: ByteArray): List<DocxParagraph> {

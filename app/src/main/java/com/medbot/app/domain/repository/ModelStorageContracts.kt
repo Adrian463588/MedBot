@@ -14,6 +14,14 @@ data class StoredModelArtifact(
     val sizeBytes: Long
 )
 
+/** Names reserved for MedBot metadata inside the user-selected model folder. */
+object ModelStorageArtifactNames {
+    const val HUGGING_FACE_ACCESS = ".medbot_huggingface_access.enc"
+    const val HUGGING_FACE_ACCESS_TEMP = ".medbot_huggingface_access.enc.part"
+
+    fun verificationMetadata(modelId: String): String = "medbot_verification_${modelId}.txt"
+}
+
 enum class ModelStorageFailureCode {
     INVALID_URI,
     NOT_TREE_URI,
@@ -42,6 +50,8 @@ interface ModelStorageGateway {
 
     fun validateDestination(treeUri: String): Result<ModelStorageDestination>
     fun takePersistableTreePermission(treeUri: String): Result<Unit>
+    /** Reconciles persisted SAF tree grants after app restart or reinstall. */
+    fun discoverPersistedDestination(candidateFileNames: Set<String>): Result<ModelStorageDestination?>
     fun findArtifact(treeUri: String, displayName: String): Result<StoredModelArtifact?>
     fun createArtifact(treeUri: String, displayName: String): Result<StoredModelArtifact>
     fun openInputStream(documentUri: String): Result<InputStream>

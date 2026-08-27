@@ -29,6 +29,12 @@ interface ChatDao {
 
     @Query("DELETE FROM chat_messages WHERE sessionId = :sessionId")
     suspend fun clearMessages(sessionId: String)
+
+    @Query("DELETE FROM chat_sessions")
+    suspend fun deleteAllSessions()
+
+    @Query("DELETE FROM chat_messages")
+    suspend fun deleteAllMessages()
 }
 
 @Dao
@@ -36,11 +42,47 @@ interface RagDao {
     @Query("SELECT * FROM rag_documents ORDER BY indexedAt DESC")
     fun getDocuments(): Flow<List<RagDocumentEntity>>
 
+    @Query("SELECT * FROM rag_documents WHERE fileUri = :fileUri LIMIT 1")
+    suspend fun getDocumentByFileUri(fileUri: String): RagDocumentEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDocument(doc: RagDocumentEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertChunks(chunks: List<DocChunkEntity>)
+
+    @Query("DELETE FROM doc_chunks WHERE docId = :docId")
+    suspend fun deleteChunksForDocument(docId: String)
+
+    /** Promotes a fully embedded document and its chunks as one Room transaction. */
+    @Transaction
+    suspend fun insertDocumentWithChunks(
+        document: RagDocumentEntity,
+        chunks: List<DocChunkEntity>
+    ) {
+        // Reindexing the same source must not leave chunks from an older
+        // corpus/version behind. The transaction keeps the old index intact
+        // if either delete or insert fails.
+        deleteChunksForDocument(document.id)
+        insertDocument(document)
+        insertChunks(chunks)
+    }
+
+    /** Replaces an older source only after the new document is fully prepared. */
+    @Transaction
+    suspend fun replaceDocumentWithChunks(
+        previousDocumentId: String?,
+        document: RagDocumentEntity,
+        chunks: List<DocChunkEntity>
+    ) {
+        if (previousDocumentId != null && previousDocumentId != document.id) {
+            deleteChunksForDocument(previousDocumentId)
+            deleteDocument(previousDocumentId)
+        }
+        deleteChunksForDocument(document.id)
+        insertDocument(document)
+        insertChunks(chunks)
+    }
 
     @Query("DELETE FROM rag_documents WHERE id = :docId")
     suspend fun deleteDocument(docId: String)
@@ -72,16 +114,40 @@ interface SkinDao {
 
 @Dao
 interface DrugDao {
-    @Query("SELECT * FROM drugs_db WHERE name LIKE '%' || :query || '%' OR genericName LIKE '%' || :query || '%' OR indication LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM drugs_db WHERE name LIKE '%' || :query || '%' OR genericName LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%' OR dosageForm LIKE '%' || :query || '%' OR strength LIKE '%' || :query || '%' OR indication LIKE '%' || :query || '%' ORDER BY name ASC LIMIT 300")
     fun searchDrugs(query: String): Flow<List<DrugEntity>>
+
+    @Query("SELECT * FROM drugs_db ORDER BY name ASC")
+    fun getAllDrugs(): Flow<List<DrugEntity>>
+
+    @Query("SELECT * FROM drugs_db ORDER BY name ASC")
+    suspend fun getAllDrugsList(): List<DrugEntity>
 
     @Query("SELECT * FROM drugs_db WHERE LOWER(name) = LOWER(:name) OR LOWER(genericName) = LOWER(:name) LIMIT 1")
     suspend fun getDrugByName(name: String): DrugEntity?
 
+    @Query("SELECT * FROM drugs_db WHERE LOWER(name) LIKE '%' || LOWER(:query) || '%' OR LOWER(genericName) LIKE '%' || LOWER(:query) || '%' LIMIT 10")
+    suspend fun findMatchingDrugs(query: String): List<DrugEntity>
+
+    @Query("SELECT * FROM drugs_db WHERE category = :category ORDER BY name ASC LIMIT 300")
+    fun getDrugsByCategory(category: String): Flow<List<DrugEntity>>
+
+    @Query("SELECT DISTINCT category FROM drugs_db WHERE category != '' ORDER BY category ASC")
+    fun getAllCategories(): Flow<List<String>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDrugs(drugs: List<DrugEntity>)
 
-    @Query("SELECT * FROM drug_interactions_db WHERE (LOWER(drugA) = LOWER(:drugA) AND LOWER(drugB) = LOWER(:drugB)) OR (LOWER(drugA) = LOWER(:drugB) AND LOWER(drugB) = LOWER(:drugA))")
+    @Query("""
+        SELECT * FROM drug_interactions_db
+        WHERE (
+            (LOWER(:drugA) LIKE '%' || LOWER(drugA) || '%' OR LOWER(drugA) LIKE '%' || LOWER(:drugA) || '%')
+            AND (LOWER(:drugB) LIKE '%' || LOWER(drugB) || '%' OR LOWER(drugB) LIKE '%' || LOWER(:drugB) || '%')
+        ) OR (
+            (LOWER(:drugA) LIKE '%' || LOWER(drugB) || '%' OR LOWER(drugB) LIKE '%' || LOWER(:drugA) || '%')
+            AND (LOWER(:drugB) LIKE '%' || LOWER(drugA) || '%' OR LOWER(drugA) LIKE '%' || LOWER(:drugB) || '%')
+        )
+    """)
     suspend fun findInteraction(drugA: String, drugB: String): List<DrugInteractionEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -95,6 +161,18 @@ interface DrugDao {
 
     @Query("SELECT COUNT(*) FROM drugs_db")
     suspend fun getDrugCount(): Int
+
+    @Query("SELECT COUNT(*) FROM drugs_db WHERE name LIKE '&%'")
+    suspend fun getDirtyDrugCount(): Int
+
+    @Query("DELETE FROM drugs_db")
+    suspend fun clearAllDrugs()
+
+    @Query("SELECT COUNT(*) FROM drug_interactions_db")
+    suspend fun getInteractionCount(): Int
+
+    @Query("DELETE FROM drug_interactions_db")
+    suspend fun clearAllInteractions()
 }
 
 @Dao
@@ -128,6 +206,9 @@ interface HealthToolsDao {
 
     @Query("UPDATE reminders SET isEnabled = :enabled WHERE id = :id")
     suspend fun updateReminderStatus(id: String, enabled: Boolean)
+
+    @Query("SELECT * FROM reminders WHERE id = :id LIMIT 1")
+    suspend fun getReminderById(id: String): ReminderEntity?
 
     @Query("DELETE FROM reminders WHERE id = :id")
     suspend fun deleteReminder(id: String)

@@ -8,7 +8,7 @@
 | **Status** | Approved / Ready for Implementation |
 | **Target OS** | Android 12+ (API 31) s.d. Android 15 (API 35) |
 | **Bahasa Utama** | Bahasa Indonesia (Default) & English |
-| **Konektivitas** | Offline-First (Inferensi AI 100% Lokal/On-Device; Internet hanya digunakan opsional untuk unduh bundle model AI) |
+| **Konektivitas** | Local-First (Inferensi AI 100% Lokal/On-Device; Internet hanya untuk unduh model atau evidence web opsional setelah persetujuan pengguna) |
 
 ---
 
@@ -20,13 +20,13 @@ Akses terhadap layanan kesehatan berkualitas dan konsultasi medis cepat sering k
 **MedBot** adalah aplikasi Android berbasis **Jetpack Compose** yang berfungsi sebagai asisten informasi kesehatan privat dan local-first. Triase aturan keselamatan, persona, penyimpanan, dan UI berjalan di perangkat. Inferensi LLM, RAG, dan vision hanya aktif setelah runtime, model, dokumen, embedder, atau foto nyata tervalidasi; aplikasi tidak mengklaim diagnosis atau hasil klinis tanpa evidence gate.
 
 ### 1.2 Pilar Utama Produk
-1. **Privasi Mutlak & 100% Offline Inference**: Tidak ada data medis, teks chat, atau citra foto yang keluar dari perangkat. Seluruh inferensi teks dan visi berjalan di perangkat.
+1. **Privasi & Local Inference**: Tidak ada inferensi cloud. Teks chat, riwayat, profil pasien, dan foto tetap di perangkat. Evidence web hanya dicari setelah opt-in eksplisit, dengan kueri saat ini yang sudah disanitasi; riwayat, gambar, identitas, dan instruksi persona tidak dikirim.
 2. **Pemuatan Model AI yang Terverifikasi**:
    - **Pemuatan Berkas Berbasis SAF**: Memuat berkas model lokal `.litertlm` dan dokumen RAG yang dipilih pengguna melalui SAF.
    - **In-App Resumable Model Downloader**: Tombol unduh hanya boleh aktif untuk manifest resmi yang memiliki URL HTTPS, ukuran, SHA-256, dan provenance terverifikasi. Tanpa manifest tersebut, UI tetap `MODEL_UNAVAILABLE`.
 3. **Multi-Agent & Persona Adaptif**: Registry 46 agen spesialis menyediakan routing dan konteks persona. Output AI tetap memerlukan runtime model lokal yang benar-benar loaded.
 4. **Dermatologi Visual & Skin Lineage**: Kemampuan menangkap/mengimpor foto nyata dan menyimpan linimasa lokal. Analisis visual tetap `UNAVAILABLE` sampai model vision lokal tervalidasi tersedia; tidak ada baseline benign atau diagnosis sintetis.
-5. **Tanpa Hambatan Autentikasi (Zero-Friction / No Auth)**: Pengguna langsung dapat menggunakan seluruh fitur aplikasi tanpa registrasi atau login, dengan data tersimpan aman di basis data lokal Room.
+5. **Tanpa Hambatan Autentikasi (Zero-Friction / No Auth)**: Pengguna langsung dapat menggunakan seluruh fitur aplikasi tanpa registrasi atau login, dengan data tersimpan aman di basis data lokal Room. Model gated pihak ketiga dapat memakai token read-only milik user yang dimasukkan secara eksplisit dan disimpan terenkripsi di Android Keystore, dengan encrypted backup di folder SAF pilihan user; plaintext token tidak pernah ditulis ke SAF, Room, log, atau WorkManager input. Aplikasi tidak membuat akun atau mengelola OAuth.
 
 ---
 
@@ -61,7 +61,7 @@ Akses terhadap layanan kesehatan berkualitas dan konsultasi medis cepat sering k
    - Tombol unduh model langsung di aplikasi (layar *Model Manager*) hanya tersedia setelah manifest resmi dengan metadata integritas lengkap diverifikasi.
   - Menggunakan `WorkManager` dan `OkHttp` dengan header HTTP Range (`Range: bytes=X-` / `If-Range`) sehingga proses unduhan dapat dijeda dan dilanjutkan secara otomatis saat jaringan Wi-Fi terhubung kembali.
   - Verifikasi integritas otomatis dengan *checksum* SHA-256 dan *atomic file rename* dari `.part` ke berkas model final.
-  - Opsi penyimpanan model yang diunduh ke direktori privat aplikasi atau folder SAF eksternal.
+  - Model final dan partial download selalu ditulis ke folder SAF eksternal yang dipilih pengguna. Cache privat hanya staging sementara saat runtime LiteRT-LM membutuhkan filesystem path; cache tidak menjadi sumber pemulihan model.
 * **Streaming Token Real-Time**:
   - Inferensi menghasilkan respons kata demi kata (token streaming) dengan animasi *typewriter* yang mulus.
   - UI StateFlow dengan *throttling* (sampling 50ms) untuk mencegah *recomposition lag* pada perangkat berspesifikasi menengah.
@@ -69,10 +69,17 @@ Akses terhadap layanan kesehatan berkualitas dan konsultasi medis cepat sering k
   - Riwayat percakapan disimpan secara terstruktur di Room Database.
   - Pengguna dapat membuat sesi percakapan baru, mengganti judul chat, menghapus riwayat, atau mencari isi pesan lama.
   - Kontekstualisasi riwayat percakapan otomatis (*Sliding Window* 6-10 pesan terakhir) untuk menjaga batasan *context window* model.
+* **Fallback Evidence Web yang Terkendali**:
+  - Jika retrieval dokumen lokal tidak cukup dan pengguna mengaktifkan opsi `Cari evidence web bila lokal tidak cukup`, gateway hanya mengirim topik pertanyaan saat ini setelah redaksi identitas, email, nomor telepon, tanggal, dan nomor panjang.
+  - Sumber runtime dibatasi ke host HTTPS yang di-allowlist dan endpoint resmi WHO serta NCBI/PubMed. `robots.txt`, batas ukuran, timeout, status HTTP, cache TTL in-memory, dan provenance wajib dipatuhi. Tidak ada arbitrary URL, live scraping Halodoc/K24, SSRF, atau pengiriman foto/riwayat ke jaringan.
+  - Evidence web memiliki role (`AUTHORITATIVE_GUIDANCE`, `PRIMARY_RESEARCH`, atau `SECONDARY_EDUCATION`) dan URL yang dapat dibuka dari citation. Evidence tersebut hanya menjadi data pasif untuk prompt; LiteRT-LM lokal tetap satu-satunya generator jawaban.
+  - Jika jaringan, allowlist, robots policy, atau sumber gagal, UI menampilkan `UNAVAILABLE`/`INSUFFICIENT_DATA`; aplikasi tidak mengarang jawaban. Evidence web tanpa sumber manajemen klinis yang authoritative tidak boleh melewati guardrail obat.
 
 ### 3.2 Fitur 2: Basis Pengetahuan Dokumen RAG (Local RAG via SAF)
-* **Integrasi Folder Knowledge Base**:
-   - Pengguna dapat memilih dokumen medis melalui SAF. Aplikasi tidak menyertakan corpus klinis bawaan atau dokumen sintetis.
+ * **Integrasi Folder Knowledge Base**:
+   - Pengguna dapat memilih dokumen medis melalui SAF. Selain itu, aplikasi menyertakan corpus BankBook `DataCleaned/rag_chunks_medgemma.jsonl` yang merupakan asset cleaned nyata dengan checksum dan provenance release; tidak ada dokumen sintetis atau record yang dibuat saat runtime.
+   - Intake build-time `docs/dataset/scrape_clinical_references.py` menambahkan 144 nama diagnosis SKDI/4A sebagai `classification_only`, status regulasi JDIH terbaru, dan cuplikan edukasi sekunder Halodoc/K24 sebagai `education_only`. Keduanya tidak dapat menjadi dasar diagnosis final, dosis, resep, antibiotik, atau racikan.
+   - Daftar 144 harus diperlakukan sebagai indeks kompetensi historis/edukatif; status hukum PPK aktif wajib mengikuti sumber JDIH terbaru dan SOP fasilitas. Placeholder URL atau halaman yang tidak dapat diverifikasi ditolak.
   - Sistem mendeteksi berkas berekstensi `.pdf`, `.txt`, `.md`, dan `.docx`.
 * **Pipeline Pemrosesan Dokumen On-Device**:
   - **Text Extraction**: Menggunakan `pdfbox-android` untuk PDF dan native parser untuk plain text/markdown.
@@ -80,9 +87,12 @@ Akses terhadap layanan kesehatan berkualitas dan konsultasi medis cepat sering k
    - **On-Device Embedding**: Mengubah *chunks* menjadi representasi vektor numerik menggunakan model embedding lokal yang benar-benar tersedia dan telah diverifikasi. Tanpa model tersebut, statusnya `EMBEDDER_UNAVAILABLE`.
   - **Vector Storage**: Penyimpanan vektor dalam Room SQLite Database menggunakan representasi BLOB atau ekstensi vektor lokal.
 * **Retrieval & Grounded Generation**:
-  - Saat pengguna bertanya, kueri diubah menjadi embedding dan dilakukan pencarian *Cosine Similarity* untuk mengambil *Top-K* (3-5) segmen dokumen paling relevan.
-  - Menggabungkan konteks dokumen ke dalam *system prompt* LLM.
-   - Menampilkan referensi/sitasi interaktif hanya dari metadata dokumen asli yang dipilih pengguna (judul, halaman bila authoritative, dan cuplikan teks asli).
+  - Saat pengguna bertanya, kueri diubah menjadi embedding, kandidat diambil lebih lebar, lalu *Cosine Similarity*, lexical overlap, judul topik, dan section klinis dipakai untuk memilih 3-5 segmen paling relevan. Chunk yang hanya menyebut gejala secara kebetulan tidak boleh menjadi evidence utama.
+  - Instruksi sistem yang stabil dipisahkan dari evidence per-turn. Evidence ditempatkan sebagai data referensi pasif pada prompt turn, sehingga percakapan LiteRT-LM dapat mempertahankan state/KV yang stabil tanpa menjadikan dokumen sebagai instruksi.
+   - Pertanyaan klinis wajib menghasilkan urutan triase awal, probing, arah diagnosis banding, fakta perawatan/obat yang eksplisit pada sumber, dan tanda bahaya. Diagnosis final, resep individual, angka yang tidak ada pada sumber, serta formula racikan tanpa protokol eksplisit ditolak oleh guardrail.
+   - Evidence dengan role `classification_only` atau `education_only` tidak memenuhi clinical-management gate. Jika PPK/monograf/protokol yang relevan tidak tersedia, aplikasi menampilkan `INSUFFICIENT_DATA` dan meminta dokumen nyata melalui SAF.
+   - Menampilkan referensi/sitasi interaktif hanya dari metadata dokumen asli yang dipilih pengguna atau asset release berchecksum (judul, halaman bila authoritative, dan cuplikan teks asli).
+   - Evidence web runtime tidak otomatis menjadi dokumen RAG permanen. Jika pengguna membutuhkan sumber offline, dokumen resmi harus diimpor melalui SAF atau masuk melalui intake build-time dengan checksum dan provenance yang dapat diaudit.
 
 ### 3.3 Fitur 3: Persona AI & Sistem Multi-Agent
 * **Orkestrator Triase Cerdas**:

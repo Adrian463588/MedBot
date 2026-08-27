@@ -57,7 +57,7 @@ import com.medbot.app.presentation.common.specialty
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigateToChat: (String?) -> Unit,
-    onNavigateToSkinScan: () -> Unit,
+    onNavigateToSkin: () -> Unit,
     onNavigateToKnowledge: () -> Unit,
     onNavigateToModels: () -> Unit,
     onNavigateToPersona: () -> Unit,
@@ -65,10 +65,16 @@ fun HomeScreen(
 ) {
     val isModelLoaded by viewModel.isModelLoaded.collectAsStateWithLifecycle()
     val modelName by viewModel.activeModelName.collectAsStateWithLifecycle()
+    val downloadedModelId by viewModel.downloadedModelId.collectAsStateWithLifecycle()
+    val downloadedModelName by viewModel.downloadedModelName.collectAsStateWithLifecycle()
     val ragCount by viewModel.ragDocumentCount.collectAsStateWithLifecycle()
     val persona by viewModel.personaConfig.collectAsStateWithLifecycle()
     val newSessionTitle = stringResource(R.string.chat_new_session_title)
     val activeAgent = remember(persona.selectedAgentId) { AgentRegistry.getAgentById(persona.selectedAgentId) }
+
+    LaunchedEffect(Unit) {
+        viewModel.checkDownloadedModelsAndAutoLoad()
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
@@ -116,7 +122,10 @@ fun HomeScreen(
                     StatusBannerCard(
                         isModelLoaded = isModelLoaded,
                         modelName = modelName,
+                        hasDownloadedModel = downloadedModelId != null,
+                        downloadedModelName = downloadedModelName,
                         ragDocCount = ragCount,
+                        onLoadModel = { viewModel.onEvent(HomeUiEvent.LoadDownloadedModel) },
                         onManageModel = onNavigateToModels,
                         onManageRag = onNavigateToKnowledge
                     )
@@ -165,7 +174,7 @@ fun HomeScreen(
                 }
                 item {
                     val actions = listOf(
-                        HomeAction(stringResource(R.string.home_action_skin), stringResource(R.string.home_action_skin_support), Icons.Filled.CameraAlt, onNavigateToSkinScan),
+                        HomeAction(stringResource(R.string.home_action_skin), stringResource(R.string.home_action_skin_support), Icons.Filled.CameraAlt, onNavigateToSkin),
                         HomeAction(stringResource(R.string.home_action_knowledge), stringResource(R.string.home_action_knowledge_support), Icons.AutoMirrored.Filled.MenuBook, onNavigateToKnowledge),
                         HomeAction(stringResource(R.string.home_action_tools), stringResource(R.string.home_action_tools_support), Icons.Filled.MedicalServices, onNavigateToTools),
                         HomeAction(stringResource(R.string.home_action_model), stringResource(R.string.home_action_model_support), Icons.Filled.Memory, onNavigateToModels)

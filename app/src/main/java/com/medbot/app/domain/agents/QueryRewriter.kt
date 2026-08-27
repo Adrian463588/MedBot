@@ -16,13 +16,22 @@ class QueryRewriter {
             contextPieces.add("$role: $textSnippet")
         }
 
-        val hasReferenceWords = listOf("dia", "itu", "tadi", "obat tersebut", "lanjutannya", "gejala sama", "same", "it", "again")
-            .any { currentQuery.lowercase().contains(it) }
+        // Match reference words as words, not substrings. A substring check
+        // made every Indonesian query containing "sakit" look like it
+        // contained the English pronoun "it", causing irrelevant history to
+        // pollute retrieval and the web fallback query.
+        val hasReferenceWords = REFERENCE_PATTERN.containsMatchIn(currentQuery)
 
         return if (hasReferenceWords && contextPieces.isNotEmpty()) {
             "Riwayat Sebelumnya:\n${contextPieces.joinToString("\n")}\n\nPertanyaan Terbaru Pasien:\n$currentQuery"
         } else {
             currentQuery.trim()
         }
+    }
+
+    private companion object {
+        val REFERENCE_PATTERN = Regex(
+            "(?i)(?:\\b(?:dia|itu|tadi|same|it|again)\\b|obat\\s+tersebut|lanjutannya|gejala\\s+sama)"
+        )
     }
 }

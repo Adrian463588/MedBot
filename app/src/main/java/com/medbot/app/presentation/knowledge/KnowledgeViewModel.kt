@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.medbot.app.domain.model.RagDocument
 import com.medbot.app.domain.model.SearchResult
+import com.medbot.app.data.rag.BundledKnowledgeSeeder
+import com.medbot.app.data.rag.BundledKnowledgeState
 import com.medbot.app.domain.repository.RagRepository
 import com.medbot.app.domain.repository.RagFailure
 import com.medbot.app.domain.repository.RagUnavailableException
@@ -12,6 +14,8 @@ import com.medbot.app.domain.repository.SafDocumentGateway
 import com.medbot.app.domain.usecase.IngestSafDocumentsUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -47,7 +51,8 @@ data class KnowledgeMessage(
 class KnowledgeViewModel @Inject constructor(
     private val ragRepository: RagRepository,
     private val ingestSafDocumentsUseCase: IngestSafDocumentsUseCase,
-    private val safDocumentGateway: SafDocumentGateway
+    private val safDocumentGateway: SafDocumentGateway,
+    bundledKnowledgeSeeder: BundledKnowledgeSeeder
 ) : ViewModel() {
     val documents: StateFlow<List<RagDocument>> = ragRepository.getDocuments()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -60,6 +65,8 @@ class KnowledgeViewModel @Inject constructor(
 
     private val _ingestMessage = MutableStateFlow<KnowledgeMessage?>(null)
     val ingestMessage: StateFlow<KnowledgeMessage?> = _ingestMessage.asStateFlow()
+    val bundledKnowledgeState: StateFlow<BundledKnowledgeState> = bundledKnowledgeSeeder.state
+    private var searchJob: Job? = null
 
     fun onEvent(event: KnowledgeUiEvent) {
         when (event) {
@@ -108,12 +115,14 @@ class KnowledgeViewModel @Inject constructor(
     }
 
     fun searchKnowledge(query: String) {
+        searchJob?.cancel()
         if (query.isBlank()) {
             _searchResults.value = emptyList()
             return
         }
-        viewModelScope.launch {
+        searchJob = viewModelScope.launch {
             try {
+                delay(250)
                 _searchResults.value = ragRepository.searchSimilarChunks(query, topK = 4)
             } catch (error: CancellationException) {
                 throw error

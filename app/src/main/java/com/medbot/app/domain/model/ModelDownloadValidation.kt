@@ -42,7 +42,9 @@ object ModelDownloadProtocol {
         if (expectedTotal <= 0L || offset < 0L || offset >= expectedTotal) {
             return DownloadProtocolFailure.INVALID_MANIFEST_SIZE
         }
-        if (expectedEtag != null && !expectedEtag.equals(responseEtag, ignoreCase = false)) {
+        val cleanExpected = expectedEtag?.trim()?.removePrefix("W/")?.removeSurrounding("\"")
+        val cleanResponse = responseEtag?.trim()?.removePrefix("W/")?.removeSurrounding("\"")
+        if (!cleanExpected.isNullOrEmpty() && !cleanResponse.isNullOrEmpty() && !cleanExpected.equals(cleanResponse, ignoreCase = true)) {
             return DownloadProtocolFailure.SOURCE_CHANGED
         }
         if (offset == 0L) {

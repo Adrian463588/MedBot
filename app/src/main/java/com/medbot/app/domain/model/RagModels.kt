@@ -11,6 +11,13 @@ data class RagDocument(
     val pageCount: Int,
     val chunkCount: Int,
     val sha256: String,
+    val embeddingModel: String = "",
+    val embeddingModelSha256: String = "",
+    val embeddingVersion: String = "",
+    val sourceRole: String = "",
+    val sourceUrl: String = "",
+    val revision: String = "",
+    val recordId: String = "",
     val indexedAt: Long = System.currentTimeMillis()
 )
 
@@ -21,7 +28,14 @@ data class DocChunk(
     val textContent: String,
     val pageNumber: Int,
     val sectionTitle: String,
-    val embedding: FloatArray
+    val embedding: FloatArray,
+    val recordId: String = "",
+    val sourceRole: String = "",
+    val sourceUrl: String = "",
+    val sourceSha256: String = "",
+    val revision: String = "",
+    val evidenceKind: String = "",
+    val citationId: String = ""
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -36,5 +50,13 @@ data class DocChunk(
 data class SearchResult(
     val chunk: DocChunk,
     val similarityScore: Float,
-    val documentTitle: String
+    val documentTitle: String,
+    val documentUri: String = "",
+    val sourceRole: String = "",
+    val sourceUrl: String = "",
+    val sourceSha256: String = "",
+    val recordId: String = "",
+    val revision: String = "",
+    val evidenceKind: String = "",
+    val citationId: String = ""
 )

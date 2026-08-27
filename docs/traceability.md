@@ -1,90 +1,113 @@
-# MedBot verification traceability
+# MedBot Chatbuddy verification traceability
 
 Matriks ini adalah catatan BMAD/spec-driven untuk `AGENTS.md`, `PRD.md`,
-`DESIGN.md`, `docs/MDFILE`, dan referensi AntiSlop. `GoldReference` dan
-`reference3` hanya dipakai sebagai referensi pola; keduanya tidak menjadi
-sumber data production dan tidak distage.
+`DESIGN.md`, `docs/MDFILE`, dan referensi AntiSlop. `GoldReference` serta
+`reference3` hanya dipakai sebagai referensi pola; keduanya bukan source
+production dan tidak boleh distage.
 
-Status:
+Status yang digunakan:
 
-- `PASS`: bukti implementasi atau test sesuai kontrak.
-- `PARTIAL_PASS`: jalur nyata sebagian terbukti, tetapi acceptance lanjutan belum lengkap.
-- `UNAVAILABLE`: aplikasi fail-closed karena capability nyata belum tersedia.
-- `BLOCKED`: acceptance membutuhkan device, permission, model, dokumen, foto, atau input yang belum tersedia.
+- `PASS`: kontrak terbukti oleh source atau test yang relevan.
+- `FAIL`: kontrak diuji dan gagal.
+- `PARTIAL_PASS`: sebagian jalur terbukti, acceptance lanjut masih tertunda.
+- `UNAVAILABLE`: capability nyata belum tersedia sehingga aplikasi fail-closed.
+- `BLOCKED`: acceptance membutuhkan model, permission, input, device, atau
+  kondisi eksternal yang belum tersedia.
 
-## Kontrak produk
+## CB-001 sampai CB-010
 
-| Requirement | Status | Evidence / boundary |
-| --- | --- | --- |
-| Kotlin, Compose, Material 3, Hilt, Room, MVVM/UDF | PASS | Source compile, Hilt graph, Room schema/migration, immutable state/event ViewModel, dan lifecycle-aware Flow collection. |
-| AntiSlop: content-first, satu primary CTA, minim card, tanpa gradient/emoji/placeholder | PASS (source) | Kontrak resmi ada di [DESIGN.md](../DESIGN.md); UI memakai semantic Material tokens, informative empty/error state, dan action path nyata. |
-| Adaptive compact/medium/expanded, list-detail, edge-to-edge | PASS (source); PARTIAL_PASS (physical) | `NavigationBar`, `NavigationRail`, Material Adaptive `ListDetailPaneScaffold`, reflow action row, root insets, dan IME padding tersedia. Physical width/orientation matrix belum seluruhnya dijalankan. |
-| Bahasa Indonesia dan English; tanpa Hindi, auth, cloud AI | PASS | `values`/`values-en`; no-auth dan local-only boundary dipertahankan. |
-| Tidak ada fabricated/mock/dummy/placeholder production output | PASS (source scan) | Tidak ada canned response, synthetic corpus, pseudo-page, hash embedding fallback, default clinical input, atau benign skin fallback. Fixture hanya berada di test source. |
-| Tidak ada `runBlocking`, `GlobalScope`, `!!`, zero-inset void, atau decorative gradient | PASS (production scan) | Scan source Kotlin/res menemukan pola terlarang tidak digunakan; binary PNG dikecualikan dari scan token. |
-| Permission dan privacy least-privilege | PASS (source); PARTIAL_PASS (device) | Tidak menambah cloud upload, `RECORD_AUDIO`, hidden phone permission, atau persistent radio identifiers. Camera/notification permission journey belum lengkap. |
-| Room migration non-destructive | PASS | Version 2 memakai migration eksplisit 1→2; destructive fallback tidak digunakan. |
+| ID | Requirement | Status | Evidence / batas aman |
+| --- | --- | --- | --- |
+| CB-001 | Local LiteRT-LM inference | PARTIAL_PASS (source/build); BLOCKED physical answer | `LlmInferenceEngine` hanya memakai LiteRT-LM nyata, lifecycle `Conversation` per sesi, streaming delta, cancellation, context budget, dan file cache. Tidak ada canned/fallback answer. Physical run belum memiliki model `.litertlm` tervalidasi yang loaded, sehingga jawaban klinis tidak diklaim. |
+| CB-002 | Bundled/uploaded local RAG | PASS (source/unit/instrumentation) | BankBook asset `2.2.0` diverifikasi checksum, di-embed dengan MiniLM TFLite nyata, diimpor atomik ke Room, dan query diare terbukti pada Samsung memakai Room + embedder + corpus. Dokumen SAF mempertahankan checksum/provenance. |
+| CB-003 | Clinical medication evidence | PASS retrieval gate; BLOCKED generated answer | PPK/ISO monograph bertipe `GUIDELINE`/`DRUG_MONOGRAPH` dapat memenuhi gate; product catalogue, classification index, dan secondary education tidak bisa. Instrumentation membuktikan query obat mengembalikan evidence `medicationEligible`; model belum loaded untuk menghasilkan jawaban. |
+| CB-004 | Triage dan dynamic probing | PASS (source/unit) | `TriageOrchestrator` mengeluarkan urgency/red flags; `ClinicalResponsePlanner` meminta usia, durasi, gejala terkait, kehamilan, alergi, obat berjalan, komorbid, dan tanda bahaya tanpa nilai default. |
+| CB-005 | Guardrail clinical output | PASS (source/unit) | Citation ID harus terikat ke evidence yang ditampilkan; dosis/angka yang tidak ada di evidence ditolak; resep individual, diagnosis final, dan racikan tanpa protokol eksplisit ditolak. |
+| CB-006 | Web fallback evidence-only | PASS (source/unit); BLOCKED physical network journey | Local RAG selalu dicoba lebih dahulu. Web default-off, opt-in, query saat ini disanitasi, allowlist hanya HTTPS WHO/NCBI/PubMed, robots/timeout/size/rate boundary diterapkan, dan LiteRT-LM lokal tetap generator. Tidak ada arbitrary scraping Halodoc/K24 di runtime. |
+| CB-007 | Citation click-through | PASS source/unit; PARTIAL physical | Citation web menyimpan URL/hash/freshness dan hanya membuka host allowlist; citation SAF menyimpan URI serta read grant; revoked grant menghasilkan state permission. UI dialog dan serialization diuji, physical click-through belum dijalankan. |
+| CB-008 | Loading/error/cancel/unavailable state | PASS source/unit/instrumentation | Chat memiliki satu `ChatUiState`, phase retrieval/indexing/generating, retry/cancel, error code, no partial save after cancellation. Notification instrumentation memakai byte progress nyata. |
+| CB-009 | Clean responsive Chatbuddy UI | PASS source; PARTIAL physical | Material 3 AntiSlop, content-first hierarchy, adaptive navigation, edge-to-edge, IME-aware composer, 48dp controls, semantic labels, and citation chips are implemented. Physical width/font/orientation matrix lengkap belum dijalankan. |
+| CB-010 | End-to-end physical acceptance | PARTIAL_PASS | Samsung launch, 7/7 instrumentation, real BankBook RAG, install/reinstall preservation, and crash/ANR scan pass. Full model generation, web fallback, SAF model download/recovery, vision inference, and Xiaomi API 35 remain blocked/unavailable. |
 
-## Model, SAF, dan downloader
+## Architecture and data boundary
+
+The production path is:
+
+```text
+ChatViewModel
+  -> SendMessageUseCase
+  -> triage + probing
+  -> typed local evidence/RAG
+  -> optional allowlisted web evidence
+  -> LiteRT-LM local inference
+  -> citation/structure guardrail
+  -> Room ChatRepository
+```
+
+- The application is Kotlin, Compose, Material 3, Hilt, Room, MVVM/UDF, and
+  lifecycle-aware `StateFlow`.
+- `ClinicalEvidenceRepository` separates guideline, drug monograph,
+  interaction, compounding protocol, textbook reference, product catalogue,
+  classification-only, and secondary education material.
+- `BankBookCorpusManifest` is pinned to 1,132 records, `2,642,327` bytes,
+  corpus SHA-256 `08dc04293e6e4b36e811b64cd3a0ac165962ea484d16799d97e530a4410b629a`,
+  and embedding asset SHA-256
+  `5c5b897c436126bda7814f24676e021b50302e46c7f5c99e85f4e1c0341bf95e`.
+- Room is schema version 7 with explicit non-destructive migrations `1→2`,
+  `2→3`, `3→4`, `4→5`, `5→6`, and `6→7`. Version 5→6 adds source/citation
+  provenance; 6→7 adds embedding version.
+- The six release-owned model manifests are official HTTPS artifacts with
+  exact size, revision, provenance, and capability. MedGemma remains HAI-DEF
+  gated; the app does not bypass source terms or invent a checksum.
+- RTK, CAVEMAN, and PONYTAIL are authoring guidance only, not runtime
+  dependencies.
+
+## Model, RAG, and web acceptance
 
 | Capability | Status | Evidence / boundary |
 | --- | --- | --- |
-| Official manifest registry | PASS | Empat manifest resmi dipin ke revision immutable dengan HTTPS URL, filename, exact size, SHA-256, provenance, source revision, format, dan capability: Qwen3, Gemma 4, LLaVA-OneVision, InternVL3.5. |
-| SAF destination selection | PASS (Samsung API 33) | `ACTION_OPEN_DOCUMENT_TREE`, persistable read/write grant, validasi directory, dan rediscovery menampilkan `SAF folder: MedBotModels` setelah rebuild/reinstall-preserving install. |
-| Download writes to SAF | PASS (Samsung API 33) | `Qwen3-0.6B.litertlm.part` terlihat di `/sdcard/Download/MedBotModels`; app-private `filesDir/models` tidak dipakai. |
-| Real download progress | PASS (bounded physical) | Progress berasal dari bytes transfer nyata dan speed measured; observed `Downloading 3.4% • 832 KB/s`. |
-| Pause/resume | PASS (bounded physical) | Pause mempertahankan partial `17,817,024` bytes; resume melanjutkan ke `23,335,602` bytes tanpa append response `200` ke partial. |
-| Full checksum, atomic promotion, model load | PASS (Samsung API 33) | `Qwen3-0.6B.litertlm` di folder SAF berukuran `614236160` byte; SHA-256 device `555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4`; UI menampilkan active cache path dan `The local model was initialized.` |
-| Vision model download/load | PARTIAL_PASS / UNAVAILABLE | LLaVA vision menghasilkan `.part` nyata `23,368,149` byte dan progress/pause; full artifact dan vision runtime initialization belum tersedia. UI tetap fail-closed dan tidak memakai text-only fallback. |
-| Error state | PASS (source + physical) | Invalid SAF tree bug diperbaiki; UI sekarang menampilkan error actionable dan Retry hanya pada WorkInfo failure nyata. |
+| BankBook seed and retrieval | PASS | Real `MiniLM TFLite + Room + BundledKnowledgeSeeder` instrumentation passed diare triage and medication retrieval with citation IDs and 64-character source SHA. |
+| Parser and provenance | PASS | JSONL nested sections, record ID, source role, source URL, revision, source SHA, evidence kind, page/section, and SAF URI are preserved; no pseudo-page or `hashCode()` SHA. |
+| Atomic reindex | PASS (source/unit compile) | Candidate embedding and parsing complete before `RagDao.replaceDocumentWithChunks`; old index is preserved if candidate preparation fails. |
+| Medication recommendation | UNAVAILABLE/BLOCKED when source/model absent | Only eligible monograph/guideline/interaction/protocol evidence can enter the gate. The product catalogue alone is insufficient; LiteRT-LM generation still requires a loaded model. |
+| Web fallback | PASS source/unit; BLOCKED physical | WHO/NCBI/PubMed evidence is bounded and citation-bearing. No history, profile, image, or identity is sent. Results are in-memory TTL evidence and are not silently persisted as permanent RAG. |
+| Vision | UNAVAILABLE | No text-only fallback, heuristic skin diagnosis, benign baseline, or fabricated visual result is allowed. |
 
-## Feature matrix
-
-| Feature / screen | Real control path | Status |
-| --- | --- | --- |
-| Home | Model/document readiness nyata, one primary consultation CTA, secondary feature links | PASS (source + Samsung smoke) |
-| Chat | Session list/detail, new/delete/back, labelled composer, attachment picker, citation dialog, model gate | PARTIAL_PASS; model lokal Qwen sudah loaded, tetapi response journey belum diklaim karena input automation pada device berpindah ke task pihak ketiga. |
-| Skin Scan | Camera/gallery, bounded media copy, required body part/notes, analyze gate | PARTIAL_PASS; input path tersedia, vision UNAVAILABLE tanpa vision runtime |
-| Skin Lineage | Empty/list-detail, record selection/delete/back | PARTIAL_PASS; no real vision result supplied |
-| Knowledge Base | SAF import, real parser/provenance/checksum, search/delete, embedder gate | PARTIAL_PASS; real document/embedder journey BLOCKED |
-| Model Manager | Folder/file picker, backend, download/pause/resume/cancel/retry/load/unload/delete, truthful errors | PASS (Qwen path); PARTIAL_PASS (vision path); SAF, transfer, pause/resume, checksum, promotion, dan LiteRT load terbukti untuk Qwen. |
-| Persona | Agent/language/tone/depth/profile/instructions and save via ViewModel/DataStore | PASS (source + Samsung smoke) |
-| Medical Tools | Drugs/labs/calculators/reminders tabs, explicit inputs, validation and unavailable state | PARTIAL_PASS; explicit input validation dan IME last-action visibility terbukti pada Samsung large text, reference-dependent data remains UNAVAILABLE. |
-
-## Static, unit, dan instrumentation evidence
+## Static, unit, instrumentation, and build evidence
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| `git diff --check` | PENDING FINAL STAGE | Run again after documentation and staged allowlist are complete. |
-| `./gradlew lintDebug --rerun-tasks` | PASS | No lint errors; report at `app/build/reports/lint-results-debug.html`. |
-| `./gradlew testDebugUnitTest --rerun-tasks` | PASS | 55 tests, 1 skipped, 0 failures/errors; manifest/protocol, downloader validation, triage, agents, calculators, parser/chunker, and verification contracts. |
-| `./gradlew assembleDebug` | PASS | `assembleDebug --rerun-tasks --no-daemon` completed; final debug APK path is `app/build/outputs/apk/debug/app-debug.apk`. |
-| `./gradlew connectedDebugAndroidTest` | PASS (bounded) | `EvidenceGateComposeTest` passed on Samsung SM-G988B API 33; broader interaction matrix remains pending. |
+| `git diff --check` | PASS | No whitespace errors; Windows LF/CRLF warnings are checkout normalization only. |
+| `.\gradlew.bat :app:lintDebug --rerun-tasks` | PASS | No MedBot lint errors; only the upstream duplicate TensorFlow Lite support namespace warning remains. |
+| `.\gradlew.bat :app:testDebugUnitTest --rerun-tasks` | PASS | 112 tests, 0 failures, 0 errors, 0 skipped. |
+| `.\gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest --rerun-tasks` | PASS | Current debug APK: 185,154,036 bytes, SHA-256 `0a287d1ea1c883ce5c745d27322ff3c15e8767e80b266fc035fbac2cfdf6bd83`. |
+| `.\gradlew.bat :app:connectedDebugAndroidTest --rerun-tasks` | PASS (Samsung) | 7 tests, 0 failures, 0 errors, 0 skipped on SM-G988B API 33. |
+| Production source scan | PASS | Kotlin/XML/Gradle production source has no forbidden canned/mock/dummy/fake/synthetic/placeholder/runBlocking/`!!`/`saf://` implementation. Binary model vocabulary and clinical source bytes are excluded from keyword scanning. |
 
-## Physical device evidence
+## Physical-device evidence
 
 | Device | Result | Observed |
 | --- | --- | --- |
-| Samsung `RRCN3008VYE`, SM-G988B, API 33, 1440×3200 | PARTIAL_PASS | Latest APK installed; launch/MainActivity, Home, Model Manager, SAF folder persistence, real Qwen3 transfer, pause/resume, large-text layout, and logcat error diagnosis verified. No MedBot FATAL EXCEPTION/ANR match in bounded scan. |
-| Xiaomi `QSWSEMRKNFZ9LJRC`, API 35, 1220×2712 | BLOCKED | Serial absent from `adb devices -l`; no physical claim is made. |
+| Samsung `RRCN3008VYE`, SM-G988B, API 33, 1440×3200 | PARTIAL_PASS | APK reinstalled with `adb install -r -d` without clearing app data. Package was re-enabled for user 0 after instrumentation left it disabled. Launcher resolved, `com.medbot.app/.MainActivity` resumed, and bounded logcat contained no `FATAL EXCEPTION` or `ANR`. Real BankBook RAG instrumentation passed 7/7, including medication-eligible retrieval. No loaded model means no generated clinical answer claim. |
+| Xiaomi `QSWSEMRKNFZ9LJRC`, API 35, 1220×2712 | BLOCKED | Device is visible, but Android policy returns `INSTALL_FAILED_USER_RESTRICTED`; no Xiaomi UI or inference claim is made. |
 
-Evidence:
+Current preview and machine-readable evidence:
 
-- [Home live preview](e2e/preview/medbot_home_final-2026-08-19-samsung.png)
-- [Model Manager loaded preview](e2e/preview/medbot_model_loaded_final-2026-08-19-samsung.png)
-- [Paused partial preview](e2e/preview/medbot_model_paused-2026-08-19-samsung.png)
-- [Medical Tools IME preview](e2e/preview/medbot_final_tools_ime2-2026-08-19-samsung.png)
-- [Vision download preview](e2e/preview/medbot_vision_downloading-2026-08-19-samsung.png)
-- [Device UI dumps](e2e/device/)
-- [JSON journey report](e2e/reports/medbot-e2e-2026-08-19.json)
+- [Current Home physical preview](e2e/preview/medbot_home_chatbuddy-2026-08-27-samsung.png)
+- [Chatbuddy device report](e2e/reports/medbot-chatbuddy-2026-08-27.json)
+- [Historical model manager preview](e2e/preview/medbot_model_loaded_final-2026-08-19-samsung.png) — model-specific evidence only.
 
-Not yet physically verified: full 320/360/411/600/840+ dp matrix in both orientations, TalkBack target audit, airplane mode, permission revoke/re-authorize, full vision checksum/load/runtime, RAG with a real document/embedder, camera with a real photo, and an end-to-end chat response. Those states remain `BLOCKED` or `UNAVAILABLE`. Qwen text-model checksum and load are physically verified; they are not generalized to vision.
+Not yet physically verified: full model download/resume/checksum/reinstall recovery
+on this run, loaded LiteRT-LM response, MedGemma gated artifact, vision
+inference, web fallback, SAF citation opening, permission revoke/re-authorize,
+airplane mode, camera photo, full 320/360/411/600/840+ dp matrix, landscape,
+large font/TalkBack audit, and Xiaomi API 35. These remain `BLOCKED` or
+`UNAVAILABLE`; no fabricated pass claim is made.
 
 ## Delivery boundary
 
-Only intentional MedBot files are eligible for staging. Nested
+Only intentional MedBot files are eligible for staging. Do not stage nested
 `docs/REFERENCES/GoldReference`, `docs/REFERENCES/reference3`,
-`.gradle/buildOutputCleanup/*`, and unrelated reference changes remain
-excluded. Before push: review staged allowlist, run secret scan, commit on
-`main`, push without force, and compare local `HEAD` with remote
-`refs/heads/main`.
+`.gradle/buildOutputCleanup/*`, raw scraped caches, raw clinical books, tokens,
+secrets, APKs, model staging, or device files. Review the staged allowlist and
+remote `main` SHA before delivery.

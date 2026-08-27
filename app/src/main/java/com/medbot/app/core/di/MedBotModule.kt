@@ -6,6 +6,10 @@ import com.medbot.app.data.ai.LlmInferenceEngine
 import com.medbot.app.data.download.ModelDownloadManager
 import com.medbot.app.data.local.database.MedBotDatabase
 import com.medbot.app.data.rag.RagOrchestrator
+import com.medbot.app.data.rag.LocalEmbedder
+import com.medbot.app.data.rag.BundledKnowledgeSeeder
+import com.medbot.app.data.rag.RagClinicalEvidenceRepository
+import com.medbot.app.data.online.AndroidOnlineEvidenceRepository
 import com.medbot.app.data.repository.ChatRepositoryImpl
 import com.medbot.app.data.repository.DrugRepositoryImpl
 import com.medbot.app.data.repository.HealthToolsRepositoryImpl
@@ -29,6 +33,8 @@ import com.medbot.app.domain.repository.SafDocumentGateway
 import com.medbot.app.domain.repository.ModelFileGateway
 import com.medbot.app.domain.repository.ModelStorageGateway
 import com.medbot.app.domain.repository.UserPreferencesRepository
+import com.medbot.app.domain.repository.OnlineEvidenceRepository
+import com.medbot.app.domain.repository.ClinicalEvidenceRepository
 import com.medbot.app.domain.usecase.AnalyzeSkinUseCase
 import com.medbot.app.domain.usecase.CheckDrugInteractionsUseCase
 import com.medbot.app.domain.usecase.IngestSafDocumentsUseCase
@@ -70,8 +76,20 @@ object MedBotModule {
 
     @Provides
     @Singleton
-    fun provideRagOrchestrator(database: MedBotDatabase): RagOrchestrator =
-        RagOrchestrator(database.ragDao())
+    fun provideRagOrchestrator(
+        application: Application,
+        database: MedBotDatabase
+    ): RagOrchestrator = RagOrchestrator(
+        ragDao = database.ragDao(),
+        embedder = LocalEmbedder(application)
+    )
+
+    @Provides
+    @Singleton
+    fun provideBundledKnowledgeSeeder(
+        application: Application,
+        ragOrchestrator: RagOrchestrator
+    ): BundledKnowledgeSeeder = BundledKnowledgeSeeder(application, ragOrchestrator)
 
     @Provides
     @Singleton
@@ -117,8 +135,20 @@ object MedBotModule {
 
     @Provides
     @Singleton
-    fun provideRagRepository(orchestrator: RagOrchestrator): RagRepository =
-        RagRepositoryImpl(orchestrator)
+    fun provideRagRepository(
+        orchestrator: RagOrchestrator,
+        bundledKnowledgeSeeder: BundledKnowledgeSeeder
+    ): RagRepository = RagRepositoryImpl(orchestrator, bundledKnowledgeSeeder)
+
+    @Provides
+    @Singleton
+    fun provideClinicalEvidenceRepository(ragRepository: RagRepository): ClinicalEvidenceRepository =
+        RagClinicalEvidenceRepository(ragRepository)
+
+    @Provides
+    @Singleton
+    fun provideOnlineEvidenceRepository(application: Application): OnlineEvidenceRepository =
+        AndroidOnlineEvidenceRepository(application)
 
     @Provides
     @Singleton
@@ -127,26 +157,37 @@ object MedBotModule {
 
     @Provides
     @Singleton
-    fun provideDrugRepository(database: MedBotDatabase): DrugRepository =
-        DrugRepositoryImpl(database.drugDao())
+    fun provideDrugRepository(
+        application: Application,
+        database: MedBotDatabase
+    ): DrugRepository {
+        val repo = DrugRepositoryImpl(application, database.drugDao())
+        com.medbot.app.domain.agents.tools.ToolRegistry.registerDrugRepository(repo)
+        return repo
+    }
 
     @Provides
     @Singleton
-    fun provideHealthToolsRepository(database: MedBotDatabase): HealthToolsRepository =
-        HealthToolsRepositoryImpl(database.healthToolsDao())
+    fun provideHealthToolsRepository(
+        database: MedBotDatabase,
+        reminderScheduler: com.medbot.app.data.reminder.ReminderScheduler
+    ): HealthToolsRepository =
+        HealthToolsRepositoryImpl(database.healthToolsDao(), reminderScheduler)
 
     @Provides
     fun provideSendMessageUseCase(
         chatRepository: ChatRepository,
         ragRepository: RagRepository,
-        preferences: UserPreferencesRepository,
-        llmEngine: LocalLlmGateway
+        clinicalEvidenceRepository: ClinicalEvidenceRepository,
+        llmEngine: LocalLlmGateway,
+        onlineEvidenceRepository: OnlineEvidenceRepository
     ): SendMessageUseCase = SendMessageUseCase(
         chatRepository = chatRepository,
         ragRepository = ragRepository,
-        userPrefsRepository = preferences,
+        clinicalEvidenceRepository = clinicalEvidenceRepository,
         llmEngine = llmEngine,
-        triageOrchestrator = TriageOrchestrator()
+        triageOrchestrator = TriageOrchestrator(),
+        onlineEvidenceRepository = onlineEvidenceRepository
     )
 
     @Provides

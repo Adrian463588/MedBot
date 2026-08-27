@@ -48,6 +48,13 @@ data class RagDocumentEntity(
     val pageCount: Int,
     val chunkCount: Int,
     val sha256: String,
+    val embeddingModel: String = "",
+    val embeddingModelSha256: String = "",
+    val embeddingVersion: String = "",
+    val sourceRole: String = "",
+    val sourceUrl: String = "",
+    val revision: String = "",
+    val recordId: String = "",
     val indexedAt: Long
 )
 
@@ -70,7 +77,14 @@ data class DocChunkEntity(
     val textContent: String,
     val pageNumber: Int,
     val sectionTitle: String,
-    val embeddingCsv: String // Store vector as comma-separated floats
+    val embeddingCsv: String, // Store vector as comma-separated floats
+    val recordId: String = "",
+    val sourceRole: String = "",
+    val sourceUrl: String = "",
+    val sourceSha256: String = "",
+    val revision: String = "",
+    val evidenceKind: String = "",
+    val citationId: String = ""
 )
 
 @Entity(tableName = "skin_records")
@@ -107,7 +121,9 @@ data class DrugEntity(
     val contraindications: String,
     val sideEffects: String,
     val isOtc: Boolean,
-    val alternativesJson: String
+    val alternativesJson: String,
+    val dosageForm: String = "",
+    val strength: String = ""
 )
 
 @Entity(tableName = "drug_interactions_db")
@@ -160,5 +176,6 @@ data class ReminderEntity(
     val timeMinute: Int,
     val daysOfWeekCsv: String,
     val isEnabled: Boolean,
+    val notificationMode: String = "SOUND_AND_VIBRATE",
     val notes: String
 )

@@ -15,6 +15,7 @@ interface ChatRepository {
     fun getMessages(sessionId: String): Flow<List<ChatMessage>>
     suspend fun insertMessage(message: ChatMessage)
     suspend fun clearMessages(sessionId: String)
+    suspend fun deleteAllSessions()
 }
 
 interface ModelRepository {
@@ -23,16 +24,26 @@ interface ModelRepository {
     fun getInstalledModels(): Flow<List<ModelManifest>>
     fun getAvailableOnlineModels(): List<ModelManifest>
     fun getDownloadProgress(modelId: String): Flow<DownloadProgress?>
-    suspend fun startDownload(modelId: String)
+    suspend fun startDownload(modelId: String): Result<Unit>
     suspend fun pauseDownload(modelId: String)
-    suspend fun resumeDownload(modelId: String)
+    suspend fun resumeDownload(modelId: String): Result<Unit>
     suspend fun cancelDownload(modelId: String)
     suspend fun deleteModel(modelId: String)
     fun getInstalledModelPath(modelId: String): String?
+    /** Returns the exact manifest used to verify the current SAF artifact. */
+    fun getVerifiedModelManifest(modelId: String): ModelManifest?
     suspend fun loadModelToRam(modelPath: String, backend: String): Boolean
     suspend fun loadVerifiedModelToRam(modelId: String, backend: String): ModelLoadResult
     suspend fun loadImportedModelToRam(modelUri: String, backend: String): ModelLoadResult
     suspend fun unloadModel()
+    fun hasHuggingFaceToken(): Boolean
+    suspend fun saveHuggingFaceToken(token: String): Result<Unit>
+    fun acceptedHuggingFaceTermsRevision(): String?
+    suspend fun acceptHuggingFaceTerms(sourceRevision: String): Result<Unit>
+    suspend fun restoreHuggingFaceAccessFromSaf(treeUri: String): Result<Unit>
+    suspend fun persistHuggingFaceAccessToSaf(treeUri: String): Result<Unit>
+    suspend fun hasHuggingFaceTokenBackup(treeUri: String): Boolean
+    suspend fun clearHuggingFaceToken(): Result<Unit>
     fun isModelLoaded(): Boolean
     fun getActiveModelName(): String?
 }
@@ -48,6 +59,18 @@ interface RagRepository {
     suspend fun deleteDocument(docId: String)
     suspend fun searchSimilarChunks(query: String, topK: Int = 4): List<SearchResult>
     suspend fun getChunkCount(): Int
+    /** Waits for the release-owned local corpus to finish indexing. */
+    suspend fun awaitIndexedData(timeoutMillis: Long): Boolean = getChunkCount() > 0
+}
+
+/** Provides only provenance-bearing clinical evidence to the answer pipeline. */
+interface ClinicalEvidenceRepository {
+    suspend fun retrieve(query: EvidenceQuery): EvidenceResult
+}
+
+/** Fetches bounded, allowlisted online evidence; it never performs LLM inference. */
+interface OnlineEvidenceRepository {
+    suspend fun search(query: String): OnlineEvidenceResult
 }
 
 /** A SAF document copied to an app-private staging file before parsing. */
@@ -102,9 +125,23 @@ interface SkinMediaGateway {
 
 interface DrugRepository {
     fun searchDrugs(query: String): Flow<List<Drug>>
+    fun getDrugsByCategory(category: String): Flow<List<Drug>>
+    fun getAllCategories(): Flow<List<String>>
     suspend fun getDrugByName(name: String): Drug?
+    suspend fun findMatchingDrugs(query: String): List<Drug>
     suspend fun checkInteraction(drugNames: List<String>): List<DrugInteraction>
     suspend fun searchSkinRemedy(condition: String): SkinRemedy?
+    suspend fun getDrugCount(): Int
+    /** Returns evidence readiness; catalogue presence never implies clinical evidence. */
+    suspend fun getMedicationKnowledgeStatus(): MedicationKnowledgeStatus = MedicationKnowledgeStatus(
+        productCatalogAvailable = false,
+        productCatalogCount = 0,
+        monographAvailable = false,
+        interactionDatasetAvailable = false,
+        compoundingProtocolAvailable = false,
+        provenance = "No verified medication evidence is available"
+    )
+    suspend fun seedInitialDataIfNeeded()
 }
 
 interface HealthToolsRepository {
@@ -117,6 +154,7 @@ interface HealthToolsRepository {
     suspend fun saveReminder(reminder: Reminder)
     suspend fun toggleReminder(id: String, enabled: Boolean)
     suspend fun deleteReminder(id: String)
+    suspend fun seedInitialDataIfNeeded()
 }
 
 interface UserPreferencesRepository {
@@ -128,4 +166,7 @@ interface UserPreferencesRepository {
     suspend fun setSafRagFolderUri(uri: String?)
     val activeLanguage: Flow<AppLanguage>
     suspend fun setLanguage(language: AppLanguage)
+    /** Explicit consent for sending a sanitized topic query to allowlisted sources. */
+    val onlineEvidenceEnabled: Flow<Boolean>
+    suspend fun setOnlineEvidenceEnabled(enabled: Boolean)
 }

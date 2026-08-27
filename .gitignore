@@ -65,7 +65,8 @@ docs/REFERENCES/
 docs/MDFILE/
 docs/AntiSlop/
 # Generated previews are staged only when they are release evidence referenced by docs.
-docs/e2e/preview/
+docs/e2e/preview/*
+!docs/e2e/preview/medbot_model_manager_gated_unavailable-2026-08-22-samsung.png
 docs/e2e/device/
 docs/e2e/reports/
 docs/e2e/journeys/
